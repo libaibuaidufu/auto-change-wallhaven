@@ -18,3 +18,6 @@ pyinstaller -D -w 壁纸.py -i 钱袋.ico --add-data 钱袋.ico;. --add-data con
 
 #### 自定义
 可以自己写修改icon 和 标题 ，然后自己打包。
+
+### 预览
+![image](https://github.com/libaibuaidufu/auto-change-wallhaven/blob/master/preview.png)
