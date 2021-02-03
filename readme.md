@@ -9,7 +9,7 @@ python 壁纸.py
 ```
 2. 打包
 ```bash
-pyinstaller -D -w 壁纸.py -i 钱袋.ico --add-data 钱袋.ico;.
+pyinstaller -D -w 壁纸.py -i 钱袋.ico --add-data 钱袋.ico;. --add-data config.ini;.
 ```
 
 ### 下载 release 包

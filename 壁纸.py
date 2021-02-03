@@ -60,7 +60,7 @@ class AutoChangeBZ():
                 print("更换失败，联系作者！")
 
     def main(self):
-        random_url = 'https://wallhaven.cc/search?q=id%3A65348&sorting=random&ref=fp&seed=gLasU&page={page}'
+        random_url = 'https://wallhaven.cc/search?q=id%3A65348&sorting=random&ref=fp&seed=gLasU&page='
         base_dir = os.getcwd()
         config_path = os.path.join(base_dir, 'config.ini')
         if os.path.isfile(config_path):
