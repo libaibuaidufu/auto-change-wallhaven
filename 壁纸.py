@@ -26,33 +26,21 @@ from PIL import Image, ImageTk
 from bs4 import BeautifulSoup
 
 
-class StoppableThread(threading.Thread):
-    """Thread class with a stop() method. The thread itself has to check
-    regularly for the stopped() condition."""
-
-    def __init__(self, *args, **kwargs):
-        super(StoppableThread, self).__init__(*args, **kwargs)
-        self._stop_event = threading.Event()
-
-    def stop(self):
-        self._stop_event.set()
-
-    def stopped(self):
-        return self._stop_event.is_set()
-
-
 class AutoChangeBZ():
     def __init__(self):
         base_dir = os.getcwd()
         self.config_path = os.path.join(base_dir, 'config.ini')
-
-    def change_bz(self, auto_change_bz, auto_change_time, auto_change_url):
         base_url = 'https://w.wallhaven.cc/full/{src_type}/wallhaven-{src_name}'
         random_header = {
             "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.104 Safari/537.36",
         }
+        self.t_id = 0
+
+    def change_bz(self, t_id, auto_change_bz, auto_change_time, auto_change_url):
         while True:
             try:
+                if t_id != self.t_id:
+                    break
                 self.next_bz(auto_change_url)
                 if auto_change_bz == '是':
                     time.sleep(int(auto_change_time))
@@ -152,9 +140,8 @@ class Application(Frame):
 
         self.th_auto_change_bz: threading.Thread = None
         self.th_next_bz: threading.Thread = None
-        self.th_listen_listen_bz_change: threading.Thread = StoppableThread(target=self.listen_bz_change, args=(),
-                                                                            daemon=True)
-        self.is_run = False
+        self.th_listen_listen_bz_change: threading.Thread = threading.Thread(target=self.listen_bz_change, args=(),
+                                                                             daemon=True)
         self.create_widgets()
         self.th_listen_listen_bz_change.start()
 
@@ -214,15 +201,10 @@ class Application(Frame):
         print("done done")
 
     def get_config(self):
-        if self.is_run:
-            self.th_auto_change_bz.stop()
-            self.is_run = False
-
-        self.acbz.is_run = False
+        self.acbz.t_id += 1
         self.auto_change_bz = self.E2.get()
         self.auto_change_time = self.E3.get()
         self.auto_change_url = self.E1.get()
-
         if os.path.isfile(self.config_path):
             config_dict = configparser.ConfigParser()
             config_dict.read(self.config_path, encoding="utf8")
@@ -231,16 +213,18 @@ class Application(Frame):
             config_dict.set('壁纸设置', '壁纸地址', self.auto_change_url)
             with open(self.config_path, "w+", encoding="utf8") as f:
                 config_dict.write(f)
-        self.th_auto_change_bz = StoppableThread(target=self.acbz.change_bz,
-                                                 args=(
-                                                     self.auto_change_bz, self.auto_change_time, self.auto_change_url),
-                                                 daemon=True)
-        self.is_run = True
+
+        self.th_auto_change_bz = threading.Thread(target=self.acbz.change_bz,
+                                                  args=(
+                                                      self.acbz.t_id,
+                                                      self.auto_change_bz, self.auto_change_time,
+                                                      self.auto_change_url),
+                                                  daemon=True)
         self.th_auto_change_bz.start()
 
     def next_bz(self):
-        self.th_next_bz = StoppableThread(target=self.acbz.next_bz,
-                                          args=(self.auto_change_url,), daemon=True)
+        self.th_next_bz = threading.Thread(target=self.acbz.next_bz,
+                                           args=(self.auto_change_url,), daemon=True)
         self.th_next_bz.start()
 
     def destroy(self):
