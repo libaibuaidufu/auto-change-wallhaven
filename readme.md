@@ -10,6 +10,8 @@ python 壁纸.py
 2. 打包
 ```bash
 pyinstaller -D -w 壁纸.py -i 钱袋.ico --add-data 钱袋.ico;. --add-data config.ini;.
+# upx 压缩
+pyinstaller -D -w 壁纸.py -i 钱袋.ico --add-data 钱袋.ico;. --add-data config.ini;. --upx-dir=upx/upx.exe
 ```
 
 ### 下载 release 包
@@ -20,5 +22,6 @@ pyinstaller -D -w 壁纸.py -i 钱袋.ico --add-data 钱袋.ico;. --add-data con
 #### 自定义
 可以自己写修改icon 和 标题 ，然后自己打包。
 
+github:(upx)[https://github.com/upx/upx]
 ### 预览
 ![image](https://github.com/libaibuaidufu/auto-change-wallhaven/blob/master/preview.png)

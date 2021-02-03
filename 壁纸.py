@@ -137,6 +137,7 @@ class Application(Frame):
             self.img = ImageTk.PhotoImage(img)
         else:
             self.img = None
+        self.t = None
         self.is_run = False
         self.create_widgets()
         self.run_th()
@@ -221,6 +222,14 @@ class Application(Frame):
     def next_bz(self):
         StoppableThread(target=self.acbz.next_bz,
                         args=(self.auto_change_url,)).start()
+
+    def  destroy(self):
+        print('in')
+        q.put(None)
+        if  self.t:
+            self.t.stop()
+        self.th_listen_listen_bz_change.stop()
+
 
 
 class SysTrayIcon(object):
@@ -471,7 +480,6 @@ class _Main:  # 调用SysTrayIcon的Demo窗口
         s.SysTrayIcon.activation()
 
     def exit(s, _sysTrayIcon=None):
-        q.put(None)
         s.root.destroy()
 
 
