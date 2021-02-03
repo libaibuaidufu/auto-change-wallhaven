@@ -42,6 +42,9 @@ class StoppableThread(threading.Thread):
 
 
 class AutoChangeBZ():
+    def __init__(self):
+        base_dir = os.getcwd()
+        self.config_path = os.path.join(base_dir, 'config.ini')
 
     def change_bz(self, auto_change_bz, auto_change_time, auto_change_url):
         base_url = 'https://w.wallhaven.cc/full/{src_type}/wallhaven-{src_name}'
@@ -58,14 +61,15 @@ class AutoChangeBZ():
             except Exception as e:
                 print(e)
                 print("更换失败，联系作者！")
+            finally:
+                print('change_bz done')
 
     def main(self):
         random_url = 'https://wallhaven.cc/search?q=id%3A65348&sorting=random&ref=fp&seed=gLasU&page='
-        base_dir = os.getcwd()
-        config_path = os.path.join(base_dir, 'config.ini')
-        if os.path.isfile(config_path):
+
+        if os.path.isfile(self.config_path):
             config_dict = configparser.ConfigParser()
-            config_dict.read(config_path, encoding="utf8")
+            config_dict.read(self.config_path, encoding="utf8")
             auto_change_bz = config_dict.get("壁纸设置", '自动换壁纸')
             auto_change_time = config_dict.get("壁纸设置", '换壁纸时间')
             auto_change_url = config_dict.get('壁纸设置', '壁纸地址')
@@ -89,7 +93,7 @@ class AutoChangeBZ():
             bz_num = random.randrange(0, len(li_list) - 1)
             li_tag = li_list[bz_num]
             image_tag = li_tag.find('img', class_='lazyload')
-            image_type_check = li_tag.find("span", class_='thumb-info')
+            image_type_check = li_tag.find("span", class_='png')
             src_url = image_tag['data-src']
             src_list = src_url.rsplit("/", 2)
             src_name = src_list[-1]
@@ -104,10 +108,16 @@ class AutoChangeBZ():
                 urllib.request.install_opener(opener)  # 安装这个opener的表头header,用于模拟浏览器.如果不模拟浏览器,下面的代码会404
                 PATH = urllib.request.urlretrieve(src_num_url)[0]  # 获取处理图片地址
                 ctypes.windll.user32.SystemParametersInfoW(20, 0, PATH, 3)  # 设置桌面
+                config_dict = configparser.ConfigParser()
+                config_dict.read(self.config_path, encoding="utf8")
+                config_dict.set("壁纸设置", '缓存地址', PATH)
+                with open(self.config_path, "w+", encoding="utf8") as f:
+                    config_dict.write(f)
                 q.put(PATH)
                 print('壁纸更换完毕')
             except Exception as e:
                 print(e)
+                print(image_type_check)
                 print(image_tag)
                 print(src_url)
                 print(random_page_url)
@@ -115,6 +125,8 @@ class AutoChangeBZ():
         except Exception as e:
             print(e)
             print("更换失败，联系作者！")
+        finally:
+            print("next_bz done")
 
 
 class Application(Frame):
@@ -137,13 +149,13 @@ class Application(Frame):
             self.img = ImageTk.PhotoImage(img)
         else:
             self.img = None
-        self.t = None
+
+        self.th_auto_change_bz: threading.Thread = None
+        self.th_next_bz: threading.Thread = None
+        self.th_listen_listen_bz_change: threading.Thread = StoppableThread(target=self.listen_bz_change, args=(),
+                                                                            daemon=True)
         self.is_run = False
         self.create_widgets()
-        self.run_th()
-
-    def run_th(self):
-        self.th_listen_listen_bz_change = StoppableThread(target=self.listen_bz_change, args=())
         self.th_listen_listen_bz_change.start()
 
     def create_widgets(self):
@@ -180,25 +192,30 @@ class Application(Frame):
         self.l = Label(self.master, image=self.img, height=800, width=1200)
         self.l.place(x=1, y=30)
 
+    def update_l_image(self, PATH):
+        print('in1')
+        img = Image.open(PATH)
+        image = ImageTk.PhotoImage(img)
+        self.l.configure(image=image)
+        print('in2')
+
     def listen_bz_change(self):
         while True:
             item = q.get()
             if item is None:
+                print('listen_bz_change done')
                 break
             img = Image.open(item)
-            img = ImageTk.PhotoImage(img)
-            self.l.configure(image=img)
-            self.update_idletasks()
-            self.update()
-            config_dict = configparser.ConfigParser()
-            config_dict.read(self.config_path, encoding="utf8")
-            config_dict.set("壁纸设置", '缓存地址', item)
-            with open(self.config_path, "w+", encoding="utf8") as f:
-                config_dict.write(f)
+            image = ImageTk.PhotoImage(img)
+            self.l.configure(image=image)
+            print(item)
+            # self.update_l_image(item)
+
+        print("done done")
 
     def get_config(self):
         if self.is_run:
-            self.t.stop()
+            self.th_auto_change_bz.stop()
             self.is_run = False
 
         self.acbz.is_run = False
@@ -214,22 +231,20 @@ class Application(Frame):
             config_dict.set('壁纸设置', '壁纸地址', self.auto_change_url)
             with open(self.config_path, "w+", encoding="utf8") as f:
                 config_dict.write(f)
-        self.t = StoppableThread(target=self.acbz.change_bz,
-                                 args=(self.auto_change_bz, self.auto_change_time, self.auto_change_url))
+        self.th_auto_change_bz = StoppableThread(target=self.acbz.change_bz,
+                                                 args=(
+                                                     self.auto_change_bz, self.auto_change_time, self.auto_change_url),
+                                                 daemon=True)
         self.is_run = True
-        self.t.start()
+        self.th_auto_change_bz.start()
 
     def next_bz(self):
-        StoppableThread(target=self.acbz.next_bz,
-                        args=(self.auto_change_url,)).start()
+        self.th_next_bz = StoppableThread(target=self.acbz.next_bz,
+                                          args=(self.auto_change_url,), daemon=True)
+        self.th_next_bz.start()
 
-    def  destroy(self):
-        print('in')
-        q.put(None)
-        if  self.t:
-            self.t.stop()
-        self.th_listen_listen_bz_change.stop()
-
+    def destroy(self):
+        super(Application, self).destroy()
 
 
 class SysTrayIcon(object):
