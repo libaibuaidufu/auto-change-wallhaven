@@ -15,6 +15,7 @@ pyinstaller -D -w 壁纸.py -i 钱袋.ico --add-data 钱袋.ico;. --add-data con
 ### 下载 release 包
 直接运行
 
+**修改配置后 点击确定 执行**
 
 #### 自定义
 可以自己写修改icon 和 标题 ，然后自己打包。
