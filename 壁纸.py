@@ -16,6 +16,7 @@ import threading
 import time
 import urllib
 from tkinter import *
+from tkinter import messagebox
 
 import requests
 import win32api
@@ -34,7 +35,7 @@ class AutoChangeBZ():
         random_header = {
             "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.104 Safari/537.36",
         }
-        self.t_id = 0
+        self.t_id = 0  # 线程控制
 
     def change_bz(self, t_id, auto_change_bz, auto_change_time, auto_change_url):
         while True:
@@ -113,8 +114,6 @@ class AutoChangeBZ():
         except Exception as e:
             print(e)
             print("更换失败，联系作者！")
-        finally:
-            print("next_bz done")
 
 
 class Application(Frame):
@@ -137,12 +136,9 @@ class Application(Frame):
             self.img = ImageTk.PhotoImage(img)
         else:
             self.img = None
-
-        self.th_auto_change_bz: threading.Thread = None
-        self.th_next_bz: threading.Thread = None
+        self.create_widgets()
         self.th_listen_listen_bz_change: threading.Thread = threading.Thread(target=self.listen_bz_change, args=(),
                                                                              daemon=True)
-        self.create_widgets()
         self.th_listen_listen_bz_change.start()
 
     def create_widgets(self):
@@ -179,26 +175,14 @@ class Application(Frame):
         self.l = Label(self.master, image=self.img, height=800, width=1200)
         self.l.place(x=1, y=30)
 
-    def update_l_image(self, PATH):
-        print('in1')
-        img = Image.open(PATH)
-        image = ImageTk.PhotoImage(img)
-        self.l.configure(image=image)
-        print('in2')
-
     def listen_bz_change(self):
         while True:
             item = q.get()
             if item is None:
-                print('listen_bz_change done')
                 break
             img = Image.open(item)
             image = ImageTk.PhotoImage(img)
             self.l.configure(image=image)
-            print(item)
-            # self.update_l_image(item)
-
-        print("done done")
 
     def get_config(self):
         self.acbz.t_id += 1
@@ -221,6 +205,7 @@ class Application(Frame):
                                                       self.auto_change_url),
                                                   daemon=True)
         self.th_auto_change_bz.start()
+        messagebox.showinfo('配置', '配置保存成功')
 
     def next_bz(self):
         self.th_next_bz = threading.Thread(target=self.acbz.next_bz,
@@ -290,7 +275,7 @@ class SysTrayIcon(object):
                                        0, 0, hinst, None)
         win32gui.UpdateWindow(s.hwnd)
         s.notify_id = None
-        s.refresh(title='软件已后台！', msg='点击重新打开', time=500)
+        s.refresh(title='壁纸软件已后台！', msg='点击重新打开', time=500)
 
         win32gui.PumpMessages()
 
