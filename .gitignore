@@ -1,6 +1,7 @@
 *.pyc
+*.spec
 /.idea/
 /build/
 /dist/
 /upx/
-*.spec
+/save/

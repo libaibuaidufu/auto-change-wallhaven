@@ -6,9 +6,9 @@
 @author  : dfkai
 @Software: PyCharm
 """
-
 import configparser
 import ctypes
+import json
 import os
 import queue
 import random
@@ -106,7 +106,7 @@ class AutoChangeBZ():
                 config_dict.set("壁纸设置", '缓存地址', PATH)
                 with open(self.config_path, "w+", encoding="utf8") as f:
                     config_dict.write(f)
-                q.put(PATH)
+                q.put(json.dumps({'path': PATH, 'src_name': src_name}))
             except Exception as e:
                 print(e)
                 print(image_type_check)
@@ -124,14 +124,18 @@ class Application(Frame):
         super().__init__(master)
         self.config_path = 'config.ini'
         self.master = master
-        self.master.geometry("1200x800")
+        self.width = 1280
+        self.height = 800
+        self.master.geometry("1280x800")
         self.master.resizable(0, 0)
         self.master.title("壁纸")
         self.master.iconbitmap(resource_path('钱袋.ico'))  # 设置图标，仅支持.ico文件
-        self.grid()
-        self.place()
+        # self.grid()
+        # self.place()
+        self.pack()
         # base_dir = os.getcwd()
         # self.config_path = os.path.join(base_dir, 'config.ini')
+        self.PATH, self.src_name = None, None
         self.acbz = AutoChangeBZ()
         self.auto_change_bz, self.auto_change_time, self.auto_change_url, self.auto_change_img = self.acbz.main()
         if self.auto_change_img:
@@ -146,46 +150,61 @@ class Application(Frame):
 
     def create_widgets(self):
         self.L1 = Label(self, text="壁纸地址：")
-        self.L1.grid(row=0, column=0, sticky=W)
+        self.L1.pack(padx=5, pady=10, side=LEFT)
 
         self.E1 = Entry(self, bd=5, width=100)
         contents = StringVar()
         contents.set(self.auto_change_url)
         self.E1["textvariable"] = contents
-        self.E1.grid(row=0, column=1, sticky=E)
+        self.E1.pack(padx=5, pady=10, side=LEFT)
 
         self.L2 = Label(self, text="是否自动更换：")
-        self.L2.grid(row=0, column=2, sticky=W)
+        self.L2.pack(padx=5, pady=10, side=LEFT)
         self.E2 = Entry(self, bd=5, width=5)
         contents = StringVar()
         contents.set(self.auto_change_bz)
         self.E2["textvariable"] = contents
-        self.E2.grid(row=0, column=3, sticky=E)
+        self.E2.pack(padx=5, pady=10, side=LEFT)
 
         self.L3 = Label(self, text="自动更换时间：")
-        self.L3.grid(row=0, column=4, sticky=W)
+        self.L3.pack(padx=5, pady=10, side=LEFT)
         self.E3 = Entry(self, bd=5, width=5)
         contents = IntVar()
         contents.set(self.auto_change_time)
         self.E3["textvariable"] = contents
-        self.E3.grid(row=0, column=5, sticky=E)
-
-        self.B1 = Button(self, text="下一张壁纸", command=self.next_bz)
-        self.B1.grid(row=0, column=6, sticky=W)
+        self.E3.pack(padx=5, pady=10, side=LEFT)
         self.B2 = Button(self, text="确定", command=self.get_config)
-        self.B2.grid(row=0, column=7, sticky=W)
+        self.B2.pack(padx=5, pady=10, side=LEFT)
 
-        self.l = Label(self.master, image=self.img, height=800, width=1200)
-        self.l.place(x=1, y=30)
+        self.B1 = Button(self, text="切换", command=self.next_bz)
+        self.B1.pack(padx=20, pady=10, side=LEFT)
+        self.B3 = Button(self, text="保存", command=self.show_msg)
+        self.B3.pack(padx=5, pady=10, side=LEFT)
+
+        self.l = Label(self.master, image=self.img, height=self.height, width=self.width)
+        self.l.pack(padx=5, pady=10)
+
+    def resize(self, w_box, h_box, pil_image):  # 参数是：要适应的窗口宽、高、Image.open后的图片
+        w, h = pil_image.size  # 获取图像的原始大小
+        f1 = 1.0 * w_box / w
+        f2 = 1.0 * h_box / h
+        factor = min([f1, f2])
+        width = int(w * factor)
+        height = int(h * factor)
+        return pil_image.resize((width, height), Image.ANTIALIAS)
 
     def listen_bz_change(self):
         while True:
             item = q.get()
             if item is None:
                 break
-            img = Image.open(item)
-            image = ImageTk.PhotoImage(img)
-            self.l.configure(image=image)
+            path_dict = json.loads(item)
+            self.PATH = path_dict['path']
+            self.src_name = path_dict['src_name']
+            img = Image.open(self.PATH)
+            pil_image_resized = self.resize(self.width, self.height, img)  # 缩放图像让它保持比例，同时限制在一个矩形框范围内  【调用函数，返回整改后的图片】
+            tk_image = ImageTk.PhotoImage(pil_image_resized)  # 把PIL图像对象转变为Tkinter的PhotoImage对象  【转换格式，方便在窗口展示】
+            self.l.configure(image=tk_image)
 
     def get_config(self):
         self.acbz.t_id += 1
@@ -214,6 +233,17 @@ class Application(Frame):
         self.th_next_bz = threading.Thread(target=self.acbz.next_bz,
                                            args=(self.auto_change_url,), daemon=True)
         self.th_next_bz.start()
+
+    def show_msg(self):
+        if not self.PATH or not self.src_name:
+            messagebox.showinfo('信息', '无法保存，谁让你上一次不保存呢！')
+            return
+        if not os.path.exists('save'):
+            os.mkdir('save')
+        with open(self.PATH, 'rb') as f:
+            with open('save/' + self.src_name, 'wb') as fd:
+                fd.write(f.read())
+        messagebox.showinfo('信息', '保存成功！')
 
     def destroy(self):
         super(Application, self).destroy()
