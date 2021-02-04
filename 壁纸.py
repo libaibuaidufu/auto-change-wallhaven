@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 @Time    : 2021/2/2 14:21
-@File    : test.py
+@File    : bz.py
 @author  : dfkai
 @Software: PyCharm
 """
@@ -27,14 +27,16 @@ from PIL import Image, ImageTk
 from bs4 import BeautifulSoup
 
 
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base_path, relative_path)
+
+
 class AutoChangeBZ():
     def __init__(self):
         base_dir = os.getcwd()
         self.config_path = os.path.join(base_dir, 'config.ini')
-        base_url = 'https://w.wallhaven.cc/full/{src_type}/wallhaven-{src_name}'
-        random_header = {
-            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.104 Safari/537.36",
-        }
         self.t_id = 0  # 线程控制
 
     def change_bz(self, t_id, auto_change_bz, auto_change_time, auto_change_url):
@@ -72,6 +74,7 @@ class AutoChangeBZ():
 
     def next_bz(self, auto_change_url):
         base_url = 'https://w.wallhaven.cc/full/{src_type}/wallhaven-{src_name}'
+
         try:
             page = random.randrange(1, 15)
             random_page_url = auto_change_url + str(page)
@@ -93,17 +96,17 @@ class AutoChangeBZ():
             print('更换壁纸中')
             try:
                 opener = urllib.request.build_opener()  # 创建一个opener
-                opener.addheaders = [('User-agent', 'Mozilla/5.0')]  # 给这个opener设置header
+                opener.addheaders = [('User-agent', 'Mozilla/5.0')]  # 给这个opener设置header #'Mozilla/5.0'
                 urllib.request.install_opener(opener)  # 安装这个opener的表头header,用于模拟浏览器.如果不模拟浏览器,下面的代码会404
                 PATH = urllib.request.urlretrieve(src_num_url)[0]  # 获取处理图片地址
                 ctypes.windll.user32.SystemParametersInfoW(20, 0, PATH, 3)  # 设置桌面
+                print('壁纸更换完毕')
                 config_dict = configparser.ConfigParser()
                 config_dict.read(self.config_path, encoding="utf8")
                 config_dict.set("壁纸设置", '缓存地址', PATH)
                 with open(self.config_path, "w+", encoding="utf8") as f:
                     config_dict.write(f)
                 q.put(PATH)
-                print('壁纸更换完毕')
             except Exception as e:
                 print(e)
                 print(image_type_check)
@@ -119,16 +122,16 @@ class AutoChangeBZ():
 class Application(Frame):
     def __init__(self, master=None):
         super().__init__(master)
+        self.config_path = 'config.ini'
         self.master = master
         self.master.geometry("1200x800")
         self.master.resizable(0, 0)
         self.master.title("壁纸")
-        self.master.iconbitmap('钱袋.ico')  # 设置图标，仅支持.ico文件
+        self.master.iconbitmap(resource_path('钱袋.ico'))  # 设置图标，仅支持.ico文件
         self.grid()
         self.place()
-        base_dir = os.getcwd()
-        self.config_path = os.path.join(base_dir, 'config.ini')
-
+        # base_dir = os.getcwd()
+        # self.config_path = os.path.join(base_dir, 'config.ini')
         self.acbz = AutoChangeBZ()
         self.auto_change_bz, self.auto_change_time, self.auto_change_url, self.auto_change_img = self.acbz.main()
         if self.auto_change_img:
@@ -433,7 +436,7 @@ class _Main:  # 调用SysTrayIcon的Demo窗口
         s.root.protocol('WM_DELETE_WINDOW', s.exit)  # 点击Tk窗口关闭时直接调用s.exit，不使用默认关闭
         s.root.mainloop()
 
-    def switch_icon(s, _sysTrayIcon, icon='钱袋.ico'):
+    def switch_icon(s, _sysTrayIcon, icon=resource_path('钱袋.ico')):
         # 点击右键菜单项目会传递SysTrayIcon自身给引用的函数，所以这里的_sysTrayIcon = s.sysTrayIcon
         # 只是一个改图标的例子，不需要的可以删除此函数
         _sysTrayIcon.icon = icon
@@ -445,7 +448,7 @@ class _Main:  # 调用SysTrayIcon的Demo窗口
     def show_msg(s, title='壁纸', msg='喔喔喔喔', time=500):
         s.SysTrayIcon.refresh(title=title, msg=msg, time=time)
 
-    def Hidden_window(s, icon='钱袋.ico', hover_text="壁纸"):
+    def Hidden_window(s, icon=resource_path('钱袋.ico'), hover_text="壁纸"):
         '''隐藏窗口至托盘区，调用SysTrayIcon的重要函数'''
 
         # 托盘图标右键菜单, 格式: ('name', None, callback),下面也是二级菜单的例子
