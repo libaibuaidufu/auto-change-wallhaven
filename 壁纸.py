@@ -16,7 +16,7 @@ import threading
 import time
 import urllib
 from tkinter import *
-from tkinter import messagebox
+from tkinter import messagebox, ttk
 
 import requests
 import win32api
@@ -39,21 +39,16 @@ class AutoChangeBZ():
         self.config_path = os.path.join(base_dir, 'config.ini')
         self.t_id = 0  # 线程控制
 
-    def change_bz(self, t_id, auto_change_bz, auto_change_time, auto_change_url):
+    def change_bz(self, t_id, auto_change_time, auto_change_url, auto_change_page):
         while True:
             try:
                 if t_id != self.t_id:
                     break
-                self.next_bz(auto_change_url)
-                if auto_change_bz == '是':
-                    time.sleep(int(auto_change_time))
-                else:
-                    break
+                self.next_bz(auto_change_url, auto_change_page)
+                time.sleep(int(auto_change_time))
             except Exception as e:
                 print(e)
-                print("更换失败，联系作者！")
-            finally:
-                print('change_bz done')
+                messagebox.showerror('更换失败，联系作者！')
 
     def main(self):
         random_url = 'https://wallhaven.cc/search?q=id%3A65348&sorting=random&ref=fp&seed=gLasU&page='
@@ -65,18 +60,19 @@ class AutoChangeBZ():
             auto_change_time = config_dict.get("壁纸设置", '换壁纸时间')
             auto_change_url = config_dict.get('壁纸设置', '壁纸地址')
             auto_change_img = config_dict.get('壁纸设置', '缓存地址')
+            auto_change_page = config_dict.get('壁纸设置', '壁纸页数')
         else:
             auto_change_bz = '是'
             auto_change_time = 600
             auto_change_url = random_url
             auto_change_img = None
-        return auto_change_bz, auto_change_time, auto_change_url, auto_change_img
+            auto_change_page = 15
+        return auto_change_bz, auto_change_time, auto_change_url, auto_change_img, auto_change_page
 
-    def next_bz(self, auto_change_url):
+    def next_bz(self, auto_change_url, auto_change_page=15):
         base_url = 'https://w.wallhaven.cc/full/{src_type}/wallhaven-{src_name}'
-
         try:
-            page = random.randrange(1, 15)
+            page = random.randrange(1, auto_change_page)
             random_page_url = auto_change_url + str(page)
             response = requests.get(random_page_url)
             soup: BeautifulSoup = BeautifulSoup(response.text, 'html.parser')
@@ -93,30 +89,30 @@ class AutoChangeBZ():
             if image_type_check:
                 src_name = src_name.rsplit(".", 1)[0] + '.png'
             src_num_url = base_url.format(src_type=src_type, src_name=src_name)
-            print('更换壁纸中')
-            try:
-                opener = urllib.request.build_opener()  # 创建一个opener
-                opener.addheaders = [('User-agent', 'Mozilla/5.0')]  # 给这个opener设置header #'Mozilla/5.0'
-                urllib.request.install_opener(opener)  # 安装这个opener的表头header,用于模拟浏览器.如果不模拟浏览器,下面的代码会404
-                PATH = urllib.request.urlretrieve(src_num_url)[0]  # 获取处理图片地址
-                ctypes.windll.user32.SystemParametersInfoW(20, 0, PATH, 3)  # 设置桌面
-                print('壁纸更换完毕')
-                config_dict = configparser.ConfigParser()
-                config_dict.read(self.config_path, encoding="utf8")
-                config_dict.set("壁纸设置", '缓存地址', PATH)
-                with open(self.config_path, "w+", encoding="utf8") as f:
-                    config_dict.write(f)
-                q.put(json.dumps({'path': PATH, 'src_name': src_name}))
-            except Exception as e:
-                print(e)
-                print(image_type_check)
-                print(image_tag)
-                print(src_url)
-                print(random_page_url)
-                print(src_num_url)
+        except:
+            messagebox.showerror('错误', "请查看是否壁纸地址有问题！")
+        print('更换壁纸中')
+        try:
+            opener = urllib.request.build_opener()  # 创建一个opener
+            opener.addheaders = [('User-agent', 'Mozilla/5.0')]  # 给这个opener设置header #'Mozilla/5.0'
+            urllib.request.install_opener(opener)  # 安装这个opener的表头header,用于模拟浏览器.如果不模拟浏览器,下面的代码会404
+            PATH = urllib.request.urlretrieve(src_num_url)[0]  # 获取处理图片地址
+            ctypes.windll.user32.SystemParametersInfoW(20, 0, PATH, 3)  # 设置桌面
+            print('壁纸更换完毕')
+            config_dict = configparser.ConfigParser()
+            config_dict.read(self.config_path, encoding="utf8")
+            config_dict.set("壁纸设置", '缓存地址', PATH)
+            with open(self.config_path, "w+", encoding="utf8") as f:
+                config_dict.write(f)
+            q.put(json.dumps({'path': PATH, 'src_name': src_name}))
         except Exception as e:
             print(e)
-            print("更换失败，联系作者！")
+            print(image_type_check)
+            print(image_tag)
+            print(src_url)
+            print(random_page_url)
+            print(src_num_url)
+            messagebox.showerror('错误', "设置壁纸失败，那里出问题了我也不知道！但是不用急它还会自动运行的。")
 
 
 class Application(Frame):
@@ -130,14 +126,10 @@ class Application(Frame):
         self.master.resizable(0, 0)
         self.master.title("壁纸")
         self.master.iconbitmap(resource_path('钱袋.ico'))  # 设置图标，仅支持.ico文件
-        # self.grid()
-        # self.place()
         self.pack()
-        # base_dir = os.getcwd()
-        # self.config_path = os.path.join(base_dir, 'config.ini')
         self.PATH, self.src_name = None, None
         self.acbz = AutoChangeBZ()
-        self.auto_change_bz, self.auto_change_time, self.auto_change_url, self.auto_change_img = self.acbz.main()
+        self.auto_change_bz, self.auto_change_time, self.auto_change_url, self.auto_change_img, self.auto_change_page = self.acbz.main()
         if self.auto_change_img:
             img = Image.open(self.auto_change_img)
             self.img = ImageTk.PhotoImage(img)
@@ -152,27 +144,39 @@ class Application(Frame):
         self.L1 = Label(self, text="壁纸地址：")
         self.L1.pack(padx=5, pady=10, side=LEFT)
 
-        self.E1 = Entry(self, bd=5, width=100)
+        self.E1 = Entry(self, bd=5, width=95)
         contents = StringVar()
         contents.set(self.auto_change_url)
         self.E1["textvariable"] = contents
         self.E1.pack(padx=5, pady=10, side=LEFT)
 
-        self.L2 = Label(self, text="是否自动更换：")
+        self.L2 = Label(self, text="自动更换：")
         self.L2.pack(padx=5, pady=10, side=LEFT)
-        self.E2 = Entry(self, bd=5, width=5)
-        contents = StringVar()
-        contents.set(self.auto_change_bz)
-        self.E2["textvariable"] = contents
+
+        self.E2 = ttk.Combobox(self, width=2)  # 初始化
+        is_auto_change = ("是", "否")
+        self.E2["value"] = is_auto_change
+        self.E2.current(is_auto_change.index(self.auto_change_bz))
         self.E2.pack(padx=5, pady=10, side=LEFT)
 
-        self.L3 = Label(self, text="自动更换时间：")
+        self.L3 = Label(self, text="时间：")
         self.L3.pack(padx=5, pady=10, side=LEFT)
-        self.E3 = Entry(self, bd=5, width=5)
+
+        self.E3 = Entry(self, bd=5, width=4)
         contents = IntVar()
         contents.set(self.auto_change_time)
         self.E3["textvariable"] = contents
         self.E3.pack(padx=5, pady=10, side=LEFT)
+
+        self.L4 = Label(self, text="总页数：")
+        self.L4.pack(padx=5, pady=10, side=LEFT)
+
+        self.E4 = Entry(self, bd=5, width=4)
+        contents = IntVar()
+        contents.set(self.auto_change_page)
+        self.E4["textvariable"] = contents
+        self.E4.pack(padx=5, pady=10, side=LEFT)
+
         self.B2 = Button(self, text="确定", command=self.get_config)
         self.B2.pack(padx=5, pady=10, side=LEFT)
 
@@ -211,27 +215,29 @@ class Application(Frame):
         self.auto_change_bz = self.E2.get()
         self.auto_change_time = self.E3.get()
         self.auto_change_url = self.E1.get()
+        self.auto_change_page = self.E4.get()
         if os.path.isfile(self.config_path):
             config_dict = configparser.ConfigParser()
             config_dict.read(self.config_path, encoding="utf8")
             config_dict.set("壁纸设置", '自动换壁纸', self.auto_change_bz)
             config_dict.set("壁纸设置", '换壁纸时间', self.auto_change_time)
             config_dict.set('壁纸设置', '壁纸地址', self.auto_change_url)
+            config_dict.set('壁纸设置', '壁纸页数', self.auto_change_page)
             with open(self.config_path, "w+", encoding="utf8") as f:
                 config_dict.write(f)
 
-        self.th_auto_change_bz = threading.Thread(target=self.acbz.change_bz,
-                                                  args=(
-                                                      self.acbz.t_id,
-                                                      self.auto_change_bz, self.auto_change_time,
-                                                      self.auto_change_url),
-                                                  daemon=True)
-        self.th_auto_change_bz.start()
+        if self.auto_change_bz == "是":
+            self.th_auto_change_bz = threading.Thread(target=self.acbz.change_bz,
+                                                      args=(
+                                                          self.acbz.t_id, self.auto_change_time,
+                                                          self.auto_change_url, self.auto_change_page),
+                                                      daemon=True)
+            self.th_auto_change_bz.start()
         messagebox.showinfo('配置', '配置保存成功')
 
     def next_bz(self):
         self.th_next_bz = threading.Thread(target=self.acbz.next_bz,
-                                           args=(self.auto_change_url,), daemon=True)
+                                           args=(self.auto_change_url, self.auto_change_page), daemon=True)
         self.th_next_bz.start()
 
     def show_msg(self):
