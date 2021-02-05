@@ -47,11 +47,12 @@ class AutoChangeBZ():
                 self.next_bz(auto_change_url, auto_change_page)
                 time.sleep(int(auto_change_time))
             except Exception as e:
-                print(e)
-                messagebox.showerror('更换失败，联系作者！')
+                print('1', e)
+                messagebox.showerror('错误', '请重新启动！')
+                break
 
     def main(self):
-        random_url = 'https://wallhaven.cc/search?q=id%3A65348&sorting=random&ref=fp&seed=gLasU&page='
+        random_url = 'https://wallhaven.cc/search?sorting=random&ref=fp&seed=gLasU&page='
 
         if os.path.isfile(self.config_path):
             config_dict = configparser.ConfigParser()
@@ -72,7 +73,7 @@ class AutoChangeBZ():
     def next_bz(self, auto_change_url, auto_change_page=15):
         base_url = 'https://w.wallhaven.cc/full/{src_type}/wallhaven-{src_name}'
         try:
-            page = random.randrange(1, auto_change_page)
+            page = random.randrange(1, int(auto_change_page))
             random_page_url = auto_change_url + str(page)
             response = requests.get(random_page_url)
             soup: BeautifulSoup = BeautifulSoup(response.text, 'html.parser')
@@ -89,8 +90,10 @@ class AutoChangeBZ():
             if image_type_check:
                 src_name = src_name.rsplit(".", 1)[0] + '.png'
             src_num_url = base_url.format(src_type=src_type, src_name=src_name)
-        except:
+        except Exception as e:
+            print(e)
             messagebox.showerror('错误', "请查看是否壁纸地址有问题！")
+            return
         print('更换壁纸中')
         try:
             opener = urllib.request.build_opener()  # 创建一个opener
@@ -112,7 +115,7 @@ class AutoChangeBZ():
             print(src_url)
             print(random_page_url)
             print(src_num_url)
-            messagebox.showerror('错误', "设置壁纸失败，那里出问题了我也不知道！但是不用急它还会自动运行的。")
+            messagebox.showerror('错误', "设置壁纸失败，那里出问题了我也不知道！可能是切换太频繁被限制了，等一会就好了。")
 
 
 class Application(Frame):
@@ -225,7 +228,7 @@ class Application(Frame):
             config_dict.set('壁纸设置', '壁纸页数', self.auto_change_page)
             with open(self.config_path, "w+", encoding="utf8") as f:
                 config_dict.write(f)
-
+        messagebox.showinfo('配置', '配置保存成功')
         if self.auto_change_bz == "是":
             self.th_auto_change_bz = threading.Thread(target=self.acbz.change_bz,
                                                       args=(
@@ -233,7 +236,6 @@ class Application(Frame):
                                                           self.auto_change_url, self.auto_change_page),
                                                       daemon=True)
             self.th_auto_change_bz.start()
-        messagebox.showinfo('配置', '配置保存成功')
 
     def next_bz(self):
         self.th_next_bz = threading.Thread(target=self.acbz.next_bz,
