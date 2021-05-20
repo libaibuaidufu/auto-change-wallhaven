@@ -86,12 +86,12 @@ class AutoChangeBZ():
                 pickle.dump(self.session.cookies, f)
         return self.session
 
-    def change_bz(self, t_id, auto_change_time, auto_change_url, auto_change_page, auto_change_proxy):
+    def change_bz(self, t_id, auto_change_time, auto_change_url, auto_change_page):
         while True:
             try:
                 if t_id != self.t_id:
                     break
-                self.next_bz(auto_change_url, auto_change_page, auto_change_proxy)
+                self.next_bz(auto_change_url, auto_change_page)
                 time.sleep(int(auto_change_time))
             except Exception as e:
                 print('1', e)
@@ -123,9 +123,9 @@ class AutoChangeBZ():
         if username and password:
             self.is_login(auto_change_proxy, username, password)
 
-        return auto_change_bz, auto_change_time, auto_change_url, auto_change_img, auto_change_page, auto_change_proxy
+        return auto_change_bz, auto_change_time, auto_change_url, auto_change_img, auto_change_page
 
-    def next_bz(self, auto_change_url, auto_change_page=15, auto_change_proxy=''):
+    def next_bz(self, auto_change_url, auto_change_page=15):
         base_url = 'https://w.wallhaven.cc/full/{src_type}/wallhaven-{src_name}'
         try:
             if int(auto_change_page) <= 1:
@@ -192,7 +192,7 @@ class Application(Frame):
         self.pack()
         self.PATH, self.src_name = None, None
         self.acbz = AutoChangeBZ()
-        self.auto_change_bz, self.auto_change_time, self.auto_change_url, self.auto_change_img, self.auto_change_page, self.auto_change_proxy = self.acbz.main()
+        self.auto_change_bz, self.auto_change_time, self.auto_change_url, self.auto_change_img, self.auto_change_page = self.acbz.main()
         if self.auto_change_img:
             img = Image.open(self.auto_change_img)
             pil_image_resized = self.resize(self.width, self.height, img)  # 缩放图像让它保持比例，同时限制在一个矩形框范围内  【调用函数，返回整改后的图片】
@@ -305,14 +305,13 @@ class Application(Frame):
             self.th_auto_change_bz = threading.Thread(target=self.acbz.change_bz,
                                                       args=(
                                                           self.acbz.t_id, self.auto_change_time,
-                                                          self.auto_change_url, self.auto_change_page,
-                                                          self.auto_change_proxy),
+                                                          self.auto_change_url, self.auto_change_page),
                                                       daemon=True)
             self.th_auto_change_bz.start()
 
     def next_bz(self):
         self.th_next_bz = threading.Thread(target=self.acbz.next_bz,
-                                           args=(self.auto_change_url, self.auto_change_page, self.auto_change_proxy),
+                                           args=(self.auto_change_url, self.auto_change_page),
                                            daemon=True)
         self.th_next_bz.start()
 
