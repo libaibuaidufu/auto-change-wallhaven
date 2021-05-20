@@ -150,7 +150,8 @@ class Application(Frame):
         self.auto_change_bz, self.auto_change_time, self.auto_change_url, self.auto_change_img, self.auto_change_page,self.auto_change_proxy = self.acbz.main()
         if self.auto_change_img:
             img = Image.open(self.auto_change_img)
-            self.img = ImageTk.PhotoImage(img)
+            pil_image_resized = self.resize(self.width, self.height, img)  # 缩放图像让它保持比例，同时限制在一个矩形框范围内  【调用函数，返回整改后的图片】
+            self.img = ImageTk.PhotoImage(pil_image_resized)  # 把PIL图像对象转变为Tkinter的PhotoImage对象  【转换格式，方便在窗口展示】
         else:
             self.img = None
         self.create_widgets()
