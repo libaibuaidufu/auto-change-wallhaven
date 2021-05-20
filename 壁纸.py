@@ -10,6 +10,7 @@ import configparser
 import ctypes
 import json
 import os
+import pickle
 import queue
 import random
 import threading
@@ -26,6 +27,10 @@ import win32gui_struct
 from PIL import Image, ImageTk
 from bs4 import BeautifulSoup
 
+config_path = 'dfk_config.ini'
+gui_title = '壁纸'
+gui_logo = '钱袋.ico'
+
 
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
@@ -36,15 +41,55 @@ def resource_path(relative_path):
 class AutoChangeBZ():
     def __init__(self):
         base_dir = os.getcwd()
-        self.config_path = os.path.join(base_dir, 'config.ini')
+        self.config_path = os.path.join(base_dir, config_path)
         self.t_id = 0  # 线程控制
 
-    def change_bz(self, t_id, auto_change_time, auto_change_url, auto_change_page,auto_change_proxy):
+    def is_login(self, auto_change_proxy, username, password):
+        index_url = 'https://wallhaven.cc/'
+        login_url = 'https://wallhaven.cc/login'
+        auth_login_url = 'https://wallhaven.cc/auth/login'
+        payload = {
+            '_token': (None, ''),
+            'username': (None, username),
+            'password': (None, password)
+        }
+        headers = {
+            'User-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36',
+            'referer': 'https://wallhaven.cc/login'
+        }
+        proxies = {
+            'https': auto_change_proxy,
+            'http': auto_change_proxy
+        }
+        self.session = requests.Session()
+        self.session.headers = headers
+        if auto_change_proxy:
+            self.session.proxies = proxies
+        if os.path.exists('cookies'):
+            with open('cookies', 'rb') as f:
+                self.session.cookies.update(pickle.load(f))
+            check_response = self.session.get(index_url)
+            if username in check_response.text:
+                print('use cookies')
+                return self.session
+        login_response = self.session.get(login_url)
+        bf = BeautifulSoup(login_response.text, 'html.parser')
+        hidden = bf.find_all('input', {'type': 'hidden'})
+        for i in hidden:
+            _token = i['value']
+            payload['_token'] = _token
+        check_response = self.session.post(auth_login_url, data=payload)
+        if check_response.status_code == 200 and username in check_response.text:
+            with open('cookies', 'wb') as f:
+                pickle.dump(self.session.cookies, f)
+        return self.session
+
+    def change_bz(self, t_id, auto_change_time, auto_change_url, auto_change_page, auto_change_proxy):
         while True:
             try:
                 if t_id != self.t_id:
                     break
-                self.next_bz(auto_change_url, auto_change_page,auto_change_proxy)
+                self.next_bz(auto_change_url, auto_change_page, auto_change_proxy)
                 time.sleep(int(auto_change_time))
             except Exception as e:
                 print('1', e)
@@ -53,7 +98,6 @@ class AutoChangeBZ():
 
     def main(self):
         random_url = 'https://wallhaven.cc/search?sorting=random&ref=fp&seed=gLasU&page='
-
         if os.path.isfile(self.config_path):
             config_dict = configparser.ConfigParser()
             config_dict.read(self.config_path, encoding="utf8")
@@ -63,6 +107,8 @@ class AutoChangeBZ():
             auto_change_img = config_dict.get('壁纸设置', '缓存地址')
             auto_change_page = config_dict.get('壁纸设置', '壁纸页数')
             auto_change_proxy = config_dict.get('壁纸设置', '代理地址')
+            username = config_dict.get('壁纸设置', '用户名')
+            password = config_dict.get('壁纸设置', '密码')
         else:
             auto_change_bz = '是'
             auto_change_time = 600
@@ -70,9 +116,14 @@ class AutoChangeBZ():
             auto_change_img = None
             auto_change_page = 15
             auto_change_proxy = ''
-        return auto_change_bz, auto_change_time, auto_change_url, auto_change_img, auto_change_page,auto_change_proxy
+            username = ''
+            password = ''
+        if username and password:
+            self.is_login(auto_change_proxy, username, password)
 
-    def next_bz(self, auto_change_url, auto_change_page=15,auto_change_proxy=''):
+        return auto_change_bz, auto_change_time, auto_change_url, auto_change_img, auto_change_page, auto_change_proxy
+
+    def next_bz(self, auto_change_url, auto_change_page=15, auto_change_proxy=''):
         base_url = 'https://w.wallhaven.cc/full/{src_type}/wallhaven-{src_name}'
         try:
             if int(auto_change_page) <= 1:
@@ -81,15 +132,7 @@ class AutoChangeBZ():
                 page = random.randrange(1, int(auto_change_page))
             random_page_url = auto_change_url + str(page)
             print(random_page_url)
-            if auto_change_proxy:
-                proxies = {
-                    'https': auto_change_proxy,
-                    'http':auto_change_proxy
-                }
-                response = requests.get(random_page_url, proxies=proxies)
-            else:
-                response = requests.get(random_page_url)
-
+            response = self.session.get(random_page_url)
             soup: BeautifulSoup = BeautifulSoup(response.text, 'html.parser')
             div_tag = soup.find('section', class_='thumb-listing-page')
             li_list = div_tag.find_all('li')
@@ -136,18 +179,18 @@ class AutoChangeBZ():
 class Application(Frame):
     def __init__(self, master=None):
         super().__init__(master)
-        self.config_path = 'config.ini'
+        self.config_path = config_path
         self.master = master
         self.width = 1280
         self.height = 800
         self.master.geometry("1280x800")
         self.master.resizable(0, 0)
-        self.master.title("壁纸")
-        self.master.iconbitmap(resource_path('钱袋.ico'))  # 设置图标，仅支持.ico文件
+        self.master.title(gui_title)
+        self.master.iconbitmap(resource_path(gui_logo))  # 设置图标，仅支持.ico文件
         self.pack()
         self.PATH, self.src_name = None, None
         self.acbz = AutoChangeBZ()
-        self.auto_change_bz, self.auto_change_time, self.auto_change_url, self.auto_change_img, self.auto_change_page,self.auto_change_proxy = self.acbz.main()
+        self.auto_change_bz, self.auto_change_time, self.auto_change_url, self.auto_change_img, self.auto_change_page, self.auto_change_proxy = self.acbz.main()
         if self.auto_change_img:
             img = Image.open(self.auto_change_img)
             pil_image_resized = self.resize(self.width, self.height, img)  # 缩放图像让它保持比例，同时限制在一个矩形框范围内  【调用函数，返回整改后的图片】
@@ -260,13 +303,15 @@ class Application(Frame):
             self.th_auto_change_bz = threading.Thread(target=self.acbz.change_bz,
                                                       args=(
                                                           self.acbz.t_id, self.auto_change_time,
-                                                          self.auto_change_url, self.auto_change_page,self.auto_change_proxy),
+                                                          self.auto_change_url, self.auto_change_page,
+                                                          self.auto_change_proxy),
                                                       daemon=True)
             self.th_auto_change_bz.start()
 
     def next_bz(self):
         self.th_next_bz = threading.Thread(target=self.acbz.next_bz,
-                                           args=(self.auto_change_url, self.auto_change_page,self.auto_change_proxy), daemon=True)
+                                           args=(self.auto_change_url, self.auto_change_page, self.auto_change_proxy),
+                                           daemon=True)
         self.th_next_bz.start()
 
     def show_msg(self):
@@ -501,7 +546,7 @@ class _Main:  # 调用SysTrayIcon的Demo窗口
         s.root.protocol('WM_DELETE_WINDOW', s.exit)  # 点击Tk窗口关闭时直接调用s.exit，不使用默认关闭
         s.root.mainloop()
 
-    def switch_icon(s, _sysTrayIcon, icon=resource_path('钱袋.ico')):
+    def switch_icon(s, _sysTrayIcon, icon=resource_path(gui_logo)):
         # 点击右键菜单项目会传递SysTrayIcon自身给引用的函数，所以这里的_sysTrayIcon = s.sysTrayIcon
         # 只是一个改图标的例子，不需要的可以删除此函数
         _sysTrayIcon.icon = icon
@@ -513,7 +558,7 @@ class _Main:  # 调用SysTrayIcon的Demo窗口
     def show_msg(s, title='壁纸', msg='喔喔喔喔', time=500):
         s.SysTrayIcon.refresh(title=title, msg=msg, time=time)
 
-    def Hidden_window(s, icon=resource_path('钱袋.ico'), hover_text="壁纸"):
+    def Hidden_window(s, icon=resource_path(gui_logo), hover_text="壁纸"):
         '''隐藏窗口至托盘区，调用SysTrayIcon的重要函数'''
 
         # 托盘图标右键菜单, 格式: ('name', None, callback),下面也是二级菜单的例子

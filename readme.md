@@ -27,9 +27,28 @@ pyinstaller -F -w 壁纸.py -i 钱袋.ico --add-data 钱袋.ico;.  --upx-dir=upx
 直接运行
 
 **修改配置后 点击确定 执行**
+#### 配置
+```
+[壁纸设置]
+自动换壁纸 = 是
+换壁纸时间 = 600
+壁纸地址 = https://wallhaven.cc/favorites?page=
+壁纸页数 = 10
+代理地址 = http://127.0.0.1:8889
+缓存地址 = 
+用户名 = username
+密码 = password
+```
 
 #### 自定义
 可以自己写修改icon 和 标题 ，然后自己打包。
+
+###### 2021-5-20 更新
+1. 增加登录功能，登录后可选择自己收藏图片展示
+2. 增加代理功能，更快访问
+
+
+
 
 github: [upx](https://github.com/upx/upx)
 ### 预览
