@@ -39,12 +39,12 @@ class AutoChangeBZ():
         self.config_path = os.path.join(base_dir, 'config.ini')
         self.t_id = 0  # 线程控制
 
-    def change_bz(self, t_id, auto_change_time, auto_change_url, auto_change_page):
+    def change_bz(self, t_id, auto_change_time, auto_change_url, auto_change_page,auto_change_proxy):
         while True:
             try:
                 if t_id != self.t_id:
                     break
-                self.next_bz(auto_change_url, auto_change_page)
+                self.next_bz(auto_change_url, auto_change_page,auto_change_proxy)
                 time.sleep(int(auto_change_time))
             except Exception as e:
                 print('1', e)
@@ -62,20 +62,34 @@ class AutoChangeBZ():
             auto_change_url = config_dict.get('壁纸设置', '壁纸地址')
             auto_change_img = config_dict.get('壁纸设置', '缓存地址')
             auto_change_page = config_dict.get('壁纸设置', '壁纸页数')
+            auto_change_proxy = config_dict.get('壁纸设置', '代理地址')
         else:
             auto_change_bz = '是'
             auto_change_time = 600
             auto_change_url = random_url
             auto_change_img = None
             auto_change_page = 15
-        return auto_change_bz, auto_change_time, auto_change_url, auto_change_img, auto_change_page
+            auto_change_proxy = ''
+        return auto_change_bz, auto_change_time, auto_change_url, auto_change_img, auto_change_page,auto_change_proxy
 
-    def next_bz(self, auto_change_url, auto_change_page=15):
+    def next_bz(self, auto_change_url, auto_change_page=15,auto_change_proxy=''):
         base_url = 'https://w.wallhaven.cc/full/{src_type}/wallhaven-{src_name}'
         try:
-            page = random.randrange(1, int(auto_change_page))
+            if int(auto_change_page) <= 1:
+                page = 1
+            else:
+                page = random.randrange(1, int(auto_change_page))
             random_page_url = auto_change_url + str(page)
-            response = requests.get(random_page_url)
+            print(random_page_url)
+            if auto_change_proxy:
+                proxies = {
+                    'https': auto_change_proxy,
+                    'http':auto_change_proxy
+                }
+                response = requests.get(random_page_url, proxies=proxies)
+            else:
+                response = requests.get(random_page_url)
+
             soup: BeautifulSoup = BeautifulSoup(response.text, 'html.parser')
             div_tag = soup.find('section', class_='thumb-listing-page')
             li_list = div_tag.find_all('li')
@@ -90,6 +104,7 @@ class AutoChangeBZ():
             if image_type_check:
                 src_name = src_name.rsplit(".", 1)[0] + '.png'
             src_num_url = base_url.format(src_type=src_type, src_name=src_name)
+            print(src_num_url)
         except Exception as e:
             print(e)
             messagebox.showerror('错误', "请查看是否壁纸地址有问题！")
@@ -132,7 +147,7 @@ class Application(Frame):
         self.pack()
         self.PATH, self.src_name = None, None
         self.acbz = AutoChangeBZ()
-        self.auto_change_bz, self.auto_change_time, self.auto_change_url, self.auto_change_img, self.auto_change_page = self.acbz.main()
+        self.auto_change_bz, self.auto_change_time, self.auto_change_url, self.auto_change_img, self.auto_change_page,self.auto_change_proxy = self.acbz.main()
         if self.auto_change_img:
             img = Image.open(self.auto_change_img)
             self.img = ImageTk.PhotoImage(img)
@@ -147,11 +162,20 @@ class Application(Frame):
         self.L1 = Label(self, text="壁纸地址：")
         self.L1.pack(padx=5, pady=10, side=LEFT)
 
-        self.E1 = Entry(self, bd=5, width=95)
+        self.E1 = Entry(self, bd=5, width=65)
         contents = StringVar()
         contents.set(self.auto_change_url)
         self.E1["textvariable"] = contents
         self.E1.pack(padx=5, pady=10, side=LEFT)
+
+        self.L5 = Label(self, text="代理：")
+        self.L5.pack(padx=5, pady=10, side=LEFT)
+
+        self.E5 = Entry(self, bd=5, width=20)
+        contents = StringVar()
+        contents.set(self.auto_change_proxy)
+        self.E5["textvariable"] = contents
+        self.E5.pack(padx=5, pady=10, side=LEFT)
 
         self.L2 = Label(self, text="自动更换：")
         self.L2.pack(padx=5, pady=10, side=LEFT)
@@ -219,6 +243,7 @@ class Application(Frame):
         self.auto_change_time = self.E3.get()
         self.auto_change_url = self.E1.get()
         self.auto_change_page = self.E4.get()
+        self.auto_change_proxy = self.E5.get()
         if os.path.isfile(self.config_path):
             config_dict = configparser.ConfigParser()
             config_dict.read(self.config_path, encoding="utf8")
@@ -226,6 +251,7 @@ class Application(Frame):
             config_dict.set("壁纸设置", '换壁纸时间', self.auto_change_time)
             config_dict.set('壁纸设置', '壁纸地址', self.auto_change_url)
             config_dict.set('壁纸设置', '壁纸页数', self.auto_change_page)
+            config_dict.set('壁纸设置', '代理地址', self.auto_change_proxy)
             with open(self.config_path, "w+", encoding="utf8") as f:
                 config_dict.write(f)
         messagebox.showinfo('配置', '配置保存成功')
@@ -233,13 +259,13 @@ class Application(Frame):
             self.th_auto_change_bz = threading.Thread(target=self.acbz.change_bz,
                                                       args=(
                                                           self.acbz.t_id, self.auto_change_time,
-                                                          self.auto_change_url, self.auto_change_page),
+                                                          self.auto_change_url, self.auto_change_page,self.auto_change_proxy),
                                                       daemon=True)
             self.th_auto_change_bz.start()
 
     def next_bz(self):
         self.th_next_bz = threading.Thread(target=self.acbz.next_bz,
-                                           args=(self.auto_change_url, self.auto_change_page), daemon=True)
+                                           args=(self.auto_change_url, self.auto_change_page,self.auto_change_proxy), daemon=True)
         self.th_next_bz.start()
 
     def show_msg(self):
