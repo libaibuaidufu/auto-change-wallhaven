@@ -64,10 +64,12 @@ class AutoChangeBZ():
         self.session = requests.Session()
         self.session.headers = headers
         if auto_change_proxy:
-            self.session.proxies = proxies
+            self.session.proxies.update(proxies)
+            self.session.trust_env = False
         if os.path.exists('cookies'):
             with open('cookies', 'rb') as f:
                 self.session.cookies.update(pickle.load(f))
+
             check_response = self.session.get(index_url)
             if username in check_response.text:
                 print('use cookies')
