@@ -27,7 +27,7 @@ import win32gui_struct
 from PIL import Image, ImageTk
 from bs4 import BeautifulSoup
 
-config_path = 'dfk_config.ini'
+config_path = 'config.ini'
 gui_title = '壁纸'
 gui_logo = '钱袋.ico'
 
@@ -43,15 +43,17 @@ class AutoChangeBZ():
         base_dir = os.getcwd()
         self.config_path = os.path.join(base_dir, config_path)
         self.t_id = 0  # 线程控制
+        self.page_image_url = {}
+        self.is_login_first = True
 
-    def is_login(self, auto_change_proxy, username, password):
+    def is_login(self, auto_change_proxy):
         index_url = 'https://wallhaven.cc/'
         login_url = 'https://wallhaven.cc/login'
         auth_login_url = 'https://wallhaven.cc/auth/login'
         payload = {
             '_token': (None, ''),
-            'username': (None, username),
-            'password': (None, password)
+            'username': (None, self.username),
+            'password': (None, self.password)
         }
         headers = {
             'User-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36',
@@ -71,7 +73,7 @@ class AutoChangeBZ():
                 self.session.cookies.update(pickle.load(f))
 
             check_response = self.session.get(index_url)
-            if username in check_response.text:
+            if self.username in check_response.text:
                 print('use cookies')
                 return self.session
         login_response = self.session.get(login_url)
@@ -81,17 +83,17 @@ class AutoChangeBZ():
             _token = i['value']
             payload['_token'] = _token
         check_response = self.session.post(auth_login_url, data=payload)
-        if check_response.status_code == 200 and username in check_response.text:
+        if check_response.status_code == 200 and self.username in check_response.text:
             with open('cookies', 'wb') as f:
                 pickle.dump(self.session.cookies, f)
         return self.session
 
-    def change_bz(self, t_id, auto_change_time, auto_change_url, auto_change_page):
+    def change_bz(self, t_id, auto_change_time, auto_change_url, auto_change_page, auto_change_proxy):
         while True:
             try:
                 if t_id != self.t_id:
                     break
-                self.next_bz(auto_change_url, auto_change_page)
+                self.next_bz(auto_change_url, auto_change_page, auto_change_proxy)
                 time.sleep(int(auto_change_time))
             except Exception as e:
                 print('1', e)
@@ -109,8 +111,8 @@ class AutoChangeBZ():
             auto_change_img = config_dict.get('壁纸设置', '缓存地址')
             auto_change_page = config_dict.get('壁纸设置', '壁纸页数')
             auto_change_proxy = config_dict.get('壁纸设置', '代理地址')
-            username = config_dict.get('壁纸设置', '用户名')
-            password = config_dict.get('壁纸设置', '密码')
+            self.username = config_dict.get('壁纸设置', '用户名')
+            self.password = config_dict.get('壁纸设置', '密码')
         else:
             auto_change_bz = '是'
             auto_change_time = 600
@@ -118,37 +120,52 @@ class AutoChangeBZ():
             auto_change_img = None
             auto_change_page = 15
             auto_change_proxy = ''
-            username = ''
-            password = ''
-        if username and password:
-            self.is_login(auto_change_proxy, username, password)
+            self.username = ''
+            self.password = ''
 
-        return auto_change_bz, auto_change_time, auto_change_url, auto_change_img, auto_change_page
+        return auto_change_bz, auto_change_time, auto_change_url, auto_change_img, auto_change_page, auto_change_proxy
 
-    def next_bz(self, auto_change_url, auto_change_page=15):
+    def next_bz(self, auto_change_url, auto_change_page=15, auto_change_proxy=''):
+        if self.is_login_first or auto_change_proxy != self.last_auto_change_proxy:
+            self.is_login(auto_change_proxy)
+            self.is_login_first = False
+            self.last_auto_change_proxy = auto_change_proxy
         base_url = 'https://w.wallhaven.cc/full/{src_type}/wallhaven-{src_name}'
         try:
             if int(auto_change_page) <= 1:
                 page = 1
             else:
                 page = random.randrange(1, int(auto_change_page))
-            random_page_url = auto_change_url + str(page)
-            print(random_page_url)
-            response = self.session.get(random_page_url)
-            soup: BeautifulSoup = BeautifulSoup(response.text, 'html.parser')
-            div_tag = soup.find('section', class_='thumb-listing-page')
-            li_list = div_tag.find_all('li')
-            bz_num = random.randrange(0, len(li_list) - 1)
-            li_tag = li_list[bz_num]
-            image_tag = li_tag.find('img', class_='lazyload')
-            image_type_check = li_tag.find("span", class_='png')
-            src_url = image_tag['data-src']
-            src_list = src_url.rsplit("/", 2)
-            src_name = src_list[-1]
-            src_type = src_list[-2]
-            if image_type_check:
-                src_name = src_name.rsplit(".", 1)[0] + '.png'
-            src_num_url = base_url.format(src_type=src_type, src_name=src_name)
+            if page in self.page_image_url.keys():
+                bz_total = self.page_image_url[page]
+                bz_num = random.randrange(0, len(bz_total) - 1)
+                src_num_url = self.page_image_url[page][bz_num]
+                src_name = str(src_num_url).rsplit('-', 1)[-1]
+            else:
+                self.page_image_url[page] = []
+                random_page_url = auto_change_url + str(page)
+                print(random_page_url)
+                response = self.session.get(random_page_url)
+                soup: BeautifulSoup = BeautifulSoup(response.text, 'html.parser')
+                div_tag = soup.find('section', class_='thumb-listing-page')
+                li_list = div_tag.find_all('li')
+                # bz_num = random.randrange(0, len(li_list) - 1)
+                # li_tag = li_list[bz_num]
+                for li_tag in li_list:
+                    image_tag = li_tag.find('img', class_='lazyload')
+                    image_type_check = li_tag.find("span", class_='png')
+                    src_url = image_tag['data-src']
+                    src_list = src_url.rsplit("/", 2)
+                    src_name = src_list[-1]
+                    src_type = src_list[-2]
+                    if image_type_check:
+                        src_name = src_name.rsplit(".", 1)[0] + '.png'
+                    src_num_url = base_url.format(src_type=src_type, src_name=src_name)
+                    self.page_image_url[page].append(src_num_url)
+                bz_total = self.page_image_url[page]
+                bz_num = random.randrange(0, len(bz_total) - 1)
+                src_num_url = self.page_image_url[page][bz_num]
+                src_name = str(src_num_url).rsplit('-', 1)[-1]
             print(src_num_url)
         except Exception as e:
             print(e)
@@ -170,10 +187,10 @@ class AutoChangeBZ():
             q.put(json.dumps({'path': PATH, 'src_name': src_name}))
         except Exception as e:
             print(e)
-            print(image_type_check)
-            print(image_tag)
-            print(src_url)
-            print(random_page_url)
+            # print(image_type_check)
+            # print(image_tag)
+            # print(src_url)
+            # print(random_page_url)
             print(src_num_url)
             messagebox.showerror('错误', "设置壁纸失败，那里出问题了我也不知道！可能是切换太频繁被限制了，等一会就好了。")
 
@@ -192,7 +209,7 @@ class Application(Frame):
         self.pack()
         self.PATH, self.src_name = None, None
         self.acbz = AutoChangeBZ()
-        self.auto_change_bz, self.auto_change_time, self.auto_change_url, self.auto_change_img, self.auto_change_page = self.acbz.main()
+        self.auto_change_bz, self.auto_change_time, self.auto_change_url, self.auto_change_img, self.auto_change_page, self.auto_change_proxy = self.acbz.main()
         if self.auto_change_img:
             img = Image.open(self.auto_change_img)
             pil_image_resized = self.resize(self.width, self.height, img)  # 缩放图像让它保持比例，同时限制在一个矩形框范围内  【调用函数，返回整改后的图片】
@@ -305,13 +322,14 @@ class Application(Frame):
             self.th_auto_change_bz = threading.Thread(target=self.acbz.change_bz,
                                                       args=(
                                                           self.acbz.t_id, self.auto_change_time,
-                                                          self.auto_change_url, self.auto_change_page),
+                                                          self.auto_change_url, self.auto_change_page,
+                                                          self.auto_change_proxy),
                                                       daemon=True)
             self.th_auto_change_bz.start()
 
     def next_bz(self):
         self.th_next_bz = threading.Thread(target=self.acbz.next_bz,
-                                           args=(self.auto_change_url, self.auto_change_page),
+                                           args=(self.auto_change_url, self.auto_change_page, self.auto_change_proxy),
                                            daemon=True)
         self.th_next_bz.start()
 
@@ -332,8 +350,9 @@ class Application(Frame):
 
 class SysTrayIcon(object):
     '''SysTrayIcon类用于显示任务栏图标'''
+    SHOW = "SHOW"
     QUIT = 'QUIT'
-    SPECIAL_ACTIONS = [QUIT]
+    SPECIAL_ACTIONS = [QUIT, SHOW]
     FIRST_ID = 5320
 
     def __init__(s, icon, hover_text, menu_options, on_quit, tk_window=None, default_menu_index=None,
@@ -556,6 +575,12 @@ class _Main:  # 调用SysTrayIcon的Demo窗口
         # 气泡提示的例子
         s.show_msg(title='图标更换', msg='图标更换成功！', time=500)
 
+    def show_tk(s, _sysTrayIcon):
+        _sysTrayIcon.destroy(exit=0)
+
+    def change_bz(s, _sysTrayIcon):
+        s.app.next_bz()
+
     def show_msg(s, title='壁纸', msg='喔喔喔喔', time=500):
         s.SysTrayIcon.refresh(title=title, msg=msg, time=time)
 
@@ -565,8 +590,10 @@ class _Main:  # 调用SysTrayIcon的Demo窗口
         # 托盘图标右键菜单, 格式: ('name', None, callback),下面也是二级菜单的例子
         # 24行有自动添加‘退出’，不需要的可删除
         # menu_options = (('一级 菜单', None, s.switch_icon),
-        #                 ('二级 菜单', None, (('更改 图标', None, s.switch_icon),)))
-        menu_options = ()
+        #                 ('二级 菜单', None, (('更改 图标', None, s.switch_icon),)),
+        #                 ('一级 菜单2', None, s.show_tk),)
+        menu_options = (('切换壁纸', None, s.change_bz),
+                        ('打开主面板', None, s.show_tk),)
         s.root.withdraw()  # 隐藏tk窗口
         if not s.SysTrayIcon: s.SysTrayIcon = SysTrayIcon(
             icon,  # 图标
