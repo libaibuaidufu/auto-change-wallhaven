@@ -1,11 +1,10 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-@Time    : 2021/2/2 14:21
-@File    : bz.py
-@author  : dfkai
-@Software: PyCharm
+@Date    : 2021/7/19
+@Author  : libaibuaidufu
+@Email   : libaibuaidufu@gmail.com
 """
+
 import configparser
 import ctypes
 import json
@@ -16,8 +15,10 @@ import random
 import threading
 import time
 import urllib
+import urllib.request
 from tkinter import *
 from tkinter import messagebox, ttk
+from urllib.parse import unquote
 
 import requests
 import win32api
@@ -27,7 +28,7 @@ import win32gui_struct
 from PIL import Image, ImageTk
 from bs4 import BeautifulSoup
 
-config_path = 'dfk_config.ini'
+config_path = 'config.ini'
 gui_title = '壁纸'
 gui_logo = '钱袋.ico'
 
@@ -43,6 +44,7 @@ class AutoChangeBZ():
         base_dir = os.getcwd()
         self.config_path = os.path.join(base_dir, config_path)
         self.t_id = 0  # 线程控制
+        self.session = None
 
     def is_login(self, auto_change_proxy, username, password):
         index_url = 'https://wallhaven.cc/'
@@ -65,9 +67,11 @@ class AutoChangeBZ():
         self.session.headers = headers
         if auto_change_proxy:
             self.session.proxies.update(proxies)
+            self.session.trust_env = True
+        else:
             self.session.trust_env = False
-        if os.path.exists('cookies'):
-            with open('cookies', 'rb') as f:
+        if os.path.exists('cookies.txt'):
+            with open('cookies.txt', 'rb') as f:
                 self.session.cookies.update(pickle.load(f))
 
             check_response = self.session.get(index_url)
@@ -82,7 +86,7 @@ class AutoChangeBZ():
             payload['_token'] = _token
         check_response = self.session.post(auth_login_url, data=payload)
         if check_response.status_code == 200 and username in check_response.text:
-            with open('cookies', 'wb') as f:
+            with open('cookies.txt', 'wb') as f:
                 pickle.dump(self.session.cookies, f)
         return self.session
 
@@ -112,6 +116,16 @@ class AutoChangeBZ():
             username = config_dict.get('壁纸设置', '用户名')
             password = config_dict.get('壁纸设置', '密码')
         else:
+            with open(self.config_path, 'w', encoding='utf8') as f:
+                f.write('[壁纸设置]\n')
+                f.write('自动换壁纸 =\n')
+                f.write('换壁纸时间 =\n')
+                f.write('壁纸地址 =\n')
+                f.write('壁纸页数 =\n')
+                f.write('代理地址 =\n')
+                f.write('缓存地址 =\n')
+                f.write('用户名 =\n')
+                f.write('密码 =')
             auto_change_bz = '是'
             auto_change_time = 600
             auto_change_url = random_url
@@ -120,10 +134,12 @@ class AutoChangeBZ():
             auto_change_proxy = ''
             username = ''
             password = ''
+
         if username and password:
+            print('login')
             self.is_login(auto_change_proxy, username, password)
 
-        return auto_change_bz, auto_change_time, auto_change_url, auto_change_img, auto_change_page
+        return auto_change_bz, auto_change_time, auto_change_url, auto_change_img, auto_change_page, auto_change_proxy
 
     def next_bz(self, auto_change_url, auto_change_page=15):
         base_url = 'https://w.wallhaven.cc/full/{src_type}/wallhaven-{src_name}'
@@ -134,8 +150,18 @@ class AutoChangeBZ():
                 page = random.randrange(1, int(auto_change_page))
             random_page_url = auto_change_url + str(page)
             print(random_page_url)
-            response = self.session.get(random_page_url)
-            soup: BeautifulSoup = BeautifulSoup(response.text, 'html.parser')
+            if self.session:
+                print('login_session')
+                response = self.session.get(random_page_url)
+                soup: BeautifulSoup = BeautifulSoup(response.text, 'html.parser')
+            else:
+                print('not_login_session')
+                opener = urllib.request.build_opener()
+                opener.addheaders = [('User-agent', 'Mozilla/5.0')]  # 给这个opener设置header #'Mozilla/5.0'
+                urllib.request.install_opener(opener)  # 安装这个opener的表头header,用于模拟浏览器.如果不模拟浏览器,下面的代码会404
+                with urllib.request.urlopen(random_page_url) as f:
+                    response = f.read().decode('utf-8')
+                soup: BeautifulSoup = BeautifulSoup(response, 'html.parser')
             div_tag = soup.find('section', class_='thumb-listing-page')
             li_list = div_tag.find_all('li')
             bz_num = random.randrange(0, len(li_list) - 1)
@@ -192,7 +218,7 @@ class Application(Frame):
         self.pack()
         self.PATH, self.src_name = None, None
         self.acbz = AutoChangeBZ()
-        self.auto_change_bz, self.auto_change_time, self.auto_change_url, self.auto_change_img, self.auto_change_page = self.acbz.main()
+        self.auto_change_bz, self.auto_change_time, self.auto_change_url, self.auto_change_img, self.auto_change_page, self.auto_change_proxy = self.acbz.main()
         if self.auto_change_img:
             img = Image.open(self.auto_change_img)
             pil_image_resized = self.resize(self.width, self.height, img)  # 缩放图像让它保持比例，同时限制在一个矩形框范围内  【调用函数，返回整改后的图片】
@@ -295,12 +321,23 @@ class Application(Frame):
             config_dict.read(self.config_path, encoding="utf8")
             config_dict.set("壁纸设置", '自动换壁纸', self.auto_change_bz)
             config_dict.set("壁纸设置", '换壁纸时间', self.auto_change_time)
-            config_dict.set('壁纸设置', '壁纸地址', self.auto_change_url)
+            config_dict.set('壁纸设置', '壁纸地址', unquote(self.auto_change_url))
             config_dict.set('壁纸设置', '壁纸页数', self.auto_change_page)
             config_dict.set('壁纸设置', '代理地址', self.auto_change_proxy)
             with open(self.config_path, "w+", encoding="utf8") as f:
                 config_dict.write(f)
         messagebox.showinfo('配置', '配置保存成功')
+        if self.acbz.session:
+            proxies = {
+                'https': self.auto_change_proxy,
+                'http': self.auto_change_proxy
+            }
+            self.acbz.session.proxies.update(proxies)
+            if self.auto_change_proxy:
+                self.acbz.session.trust_env = True
+            else:
+                self.acbz.session.trust_env = False
+
         if self.auto_change_bz == "是":
             self.th_auto_change_bz = threading.Thread(target=self.acbz.change_bz,
                                                       args=(
@@ -465,9 +502,9 @@ class SysTrayIcon(object):
 
     def notify(s, hwnd, msg, wparam, lparam):
         '''鼠标事件'''
-        if lparam == win32con.WM_LBUTTONDBLCLK:  # 双击左键
-            pass
-        elif lparam == win32con.WM_RBUTTONUP:  # 右键弹起
+        # if lparam == win32con.WM_LBUTTONDBLCLK:  # 双击左键
+        #     pass
+        if lparam == win32con.WM_RBUTTONUP:  # 右键弹起
             s.show_menu()
         elif lparam == win32con.WM_LBUTTONUP:  # 左键弹起
             s.destroy(exit=0)
