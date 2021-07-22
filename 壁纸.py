@@ -365,6 +365,7 @@ class Application(tk.Frame):
             print(src_num_url)
             messagebox.showerror('错误', "设置壁纸失败，那里出问题了我也不知道！可能是切换太频繁被限制了，等一会就好了。")
 
+
 class PanConfigWindow(tk.Toplevel):
     def __init__(self, app, config_dict):
         super().__init__()
@@ -519,6 +520,7 @@ class PanConfigWindow(tk.Toplevel):
     def cancel(self):
         self.config_dict = None  # 空！
         self.destroy()
+
 
 # 最小化
 class SysTrayIcon(object):
@@ -780,8 +782,19 @@ class _Main:  # 调用SysTrayIcon的Demo窗口
         # 气泡提示的例子
         s.show_msg(title='图标更换', msg='图标更换成功！', time=500)
 
-    def handle_proxy(s,_sysTrayIcon):
-        print(_sysTrayIcon)
+    def handle_proxy(s, _sysTrayIcon):
+        menu_options = (
+            ('切换壁纸', None, s.handle_change_bz),
+            ('设置', None, s.handle_set_config),
+            ('代理', None, (('开启√', None, s.handle_proxy), ('关闭', None, s.handle_proxy)))
+        )
+
+        menu_options = menu_options + (('退出', None, _sysTrayIcon.QUIT),)
+        _sysTrayIcon._next_action_id = _sysTrayIcon.FIRST_ID
+        _sysTrayIcon.menu_actions_by_id = set()
+        _sysTrayIcon.menu_options = _sysTrayIcon._add_ids_to_menu_options(menu_options)
+        _sysTrayIcon.menu_actions_by_id = dict(_sysTrayIcon.menu_actions_by_id)
+
 
     def handle_change_bz(s, _sysTrayIcon):
         s.app.button_next_bz()
@@ -838,8 +851,6 @@ class _Main:  # 调用SysTrayIcon的Demo窗口
                     s.app.session.trust_env = True
                 else:
                     s.app.session.trust_env = False
-
-
 
 
 if __name__ == '__main__':
