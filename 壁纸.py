@@ -6,6 +6,7 @@
 """
 
 import configparser
+import copy
 import ctypes
 import json
 import os
@@ -14,11 +15,11 @@ import queue
 import random
 import threading
 import time
+import tkinter as tk
 import urllib
 import urllib.request
-from tkinter import *
 from tkinter import messagebox, ttk
-from urllib.parse import unquote
+from urllib.parse import unquote, urlparse, parse_qs
 
 import requests
 import win32api
@@ -35,18 +36,202 @@ gui_logo = '钱袋.ico'
 
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
-    base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+    base_path = getattr(tk.sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(base_path, relative_path)
 
 
-class AutoChangeBZ():
-    def __init__(self):
-        base_dir = os.getcwd()
-        self.config_path = os.path.join(base_dir, config_path)
+class Application(tk.Frame):
+    def __init__(self, master=None):
+        super().__init__(master)
+        self.config_path = config_path
+        self.master = master
+        self.width = 1280
+        self.height = 800
+        self.master.geometry("1280x800")
+        self.master.resizable(0, 0)
+        self.master.title(gui_title)
+        self.master.iconbitmap(resource_path(gui_logo))  # 设置图标，仅支持.ico文件
+        self.pack(fill=tk.BOTH)
+        self.PATH, self.src_name = None, None
+
         self.t_id = 0  # 线程控制
         self.session = None
 
-    def is_login(self, auto_change_proxy, username, password):
+        # self = AutoChangeBZ()
+        self.auto_change_bz, self.auto_change_time, self.auto_change_url, self.auto_change_img, self.auto_change_page, self.auto_change_proxy, self.username, self.password, self.is_proxy = self.get_config()
+        if self.username and self.password:
+            print('login')
+            self.is_login(self.auto_change_proxy, self.username, self.password, self.is_proxy)
+
+        if self.auto_change_img:
+            img = Image.open(self.auto_change_img)
+            pil_image_resized = self.resize(self.width, self.height, img)  # 缩放图像让它保持比例，同时限制在一个矩形框范围内  【调用函数，返回整改后的图片】
+            self.img = ImageTk.PhotoImage(pil_image_resized)  # 把PIL图像对象转变为Tkinter的PhotoImage对象  【转换格式，方便在窗口展示】
+        else:
+            self.img = None
+
+        self.create_widgets()
+        self.th_listen_listen_bz_change: threading.Thread = threading.Thread(target=self.listen_bz_change, args=(),
+                                                                             daemon=True)
+        self.th_listen_listen_bz_change.start()
+
+    def create_widgets(self):
+        # https://wallhaven.cc/latest
+        # https://wallhaven.cc/hot
+        # https://wallhaven.cc/toplist
+        # https://wallhaven.cc/random
+        # https://wallhaven.cc/untagged
+        self.L1 = tk.Label(self, text="自定义壁纸地址：")
+        self.L1.pack(padx=5, pady=10, side=tk.LEFT)
+
+        url_list = ["https://wallhaven.cc/latest", 'https://wallhaven.cc/hot', 'https://wallhaven.cc/toplist',
+                    'https://wallhaven.cc/random', 'https://wallhaven.cc/untagged']
+        self.E1 = ttk.Combobox(self, width=65)
+        self.E1["value"] = url_list
+        self.E1.set(self.auto_change_url)
+        self.E1.pack(padx=5, pady=10, side=tk.LEFT)
+
+        self.B4 = tk.Button(self, text="确定", command=self.button_set_url_config)
+        self.B4.pack(padx=5, pady=10, side=tk.LEFT)
+
+        self.L2 = tk.Label(self, text="搜索词：")
+        self.L2.pack(padx=5, pady=10, side=tk.LEFT)
+
+        self.E2 = tk.Entry(self, bd=5, width=15)
+        contents = tk.StringVar()
+        self.E2["textvariable"] = contents
+        self.E2.pack(padx=5, pady=10, side=tk.LEFT)
+
+        self.B2 = tk.Button(self, text="搜索", command=self.button_search)
+        self.B2.pack(padx=5, pady=10, side=tk.LEFT)
+
+        self.B3 = tk.Button(self, text="保存壁纸", command=self.show_msg)
+        self.B3.pack(padx=5, pady=10, side=tk.RIGHT)
+        self.B1 = tk.Button(self, text="下一张", command=self.button_next_bz)
+        self.B1.pack(padx=20, pady=10, side=tk.RIGHT)
+
+        self.l = tk.Label(self.master, image=self.img, height=self.height, width=self.width)
+        self.l.pack(padx=5, pady=10)
+
+    def resize(self, w_box, h_box, pil_image):  # 参数是：要适应的窗口宽、高、Image.open后的图片
+        w, h = pil_image.size  # 获取图像的原始大小
+        f1 = 1.0 * w_box / w
+        f2 = 1.0 * h_box / h
+        factor = min([f1, f2])
+        width = int(w * factor)
+        height = int(h * factor)
+        return pil_image.resize((width, height), Image.ANTIALIAS)
+
+    def listen_bz_change(self):
+        while True:
+            item = q.get()
+            if item is None:
+                break
+            path_dict = json.loads(item)
+            self.PATH = path_dict['path']
+            self.src_name = path_dict['src_name']
+            img = Image.open(self.PATH)
+            pil_image_resized = self.resize(self.width, self.height, img)  # 缩放图像让它保持比例，同时限制在一个矩形框范围内  【调用函数，返回整改后的图片】
+            tk_image = ImageTk.PhotoImage(pil_image_resized)  # 把PIL图像对象转变为Tkinter的PhotoImage对象  【转换格式，方便在窗口展示】
+            self.l.configure(image=tk_image)
+
+    def get_config(self):
+        random_url = 'https://wallhaven.cc/toplist?page='
+        if os.path.isfile(self.config_path):
+            config_dict = configparser.ConfigParser()
+            config_dict.read(self.config_path, encoding="utf8")
+            auto_change_bz = config_dict.get("壁纸设置", '自动换壁纸')
+            auto_change_time = config_dict.get("壁纸设置", '换壁纸时间')
+            auto_change_url = config_dict.get('壁纸设置', '壁纸地址')
+            auto_change_img = config_dict.get('壁纸设置', '缓存地址')
+            auto_change_page = config_dict.get('壁纸设置', '壁纸页数')
+            auto_change_proxy = config_dict.get('壁纸设置', '代理地址')
+            username = config_dict.get('壁纸设置', '用户名')
+            password = config_dict.get('壁纸设置', '密码')
+            is_porxy = config_dict.get('壁纸设置', '是否启用代理')
+        else:
+            with open(self.config_path, 'w', encoding='utf8') as f:
+                f.write('[壁纸设置]\n')
+                f.write('自动换壁纸 =\n')
+                f.write('换壁纸时间 =\n')
+                f.write('壁纸地址 =\n')
+                f.write('壁纸页数 =\n')
+                f.write('代理地址 =\n')
+                f.write('缓存地址 =\n')
+                f.write('用户名 =\n')
+                f.write('密码 =\n')
+                f.write('是否启用代理 =')
+            auto_change_bz = '是'
+            auto_change_time = 600
+            auto_change_url = random_url
+            auto_change_img = None
+            auto_change_page = 15
+            auto_change_proxy = ''
+            username = ''
+            password = ''
+            is_porxy = "关闭"
+
+        return auto_change_bz, auto_change_time, auto_change_url, auto_change_img, auto_change_page, auto_change_proxy, username, password, is_porxy
+
+    def button_next_bz(self):
+        self.th_next_bz = threading.Thread(target=self.next_bz,
+                                           args=(self.auto_change_url, self.auto_change_page),
+                                           daemon=True)
+        self.th_next_bz.start()
+
+    def button_search(self):
+        self.search_key = self.E2.get()
+        if self.search_key:
+            self.auto_change_url = f"https://wallhaven.cc/search?q={self.search_key}&purity=100&sorting=random&order=desc"
+            self.contents.set(self.auto_change_url)
+            if os.path.isfile(self.config_path):
+                config_dict = configparser.ConfigParser()
+                config_dict.read(self.config_path, encoding="utf8")
+                config_dict.set('壁纸设置', '壁纸地址', unquote(self.auto_change_url))
+                with open(self.config_path, "w+", encoding="utf8") as f:
+                    config_dict.write(f)
+            if self.auto_change_bz == "是":
+                self.th_auto_change_bz = threading.Thread(target=self.change_bz,
+                                                          args=(
+                                                              self.t_id, self.auto_change_time,
+                                                              self.auto_change_url, self.auto_change_page),
+                                                          daemon=True)
+                self.th_auto_change_bz.start()
+
+    def button_set_url_config(self):
+        self.t_id += 1
+        self.auto_change_url = self.E1.get()
+        if os.path.isfile(self.config_path):
+            config_dict = configparser.ConfigParser()
+            config_dict.read(self.config_path, encoding="utf8")
+            config_dict.set('壁纸设置', '壁纸地址', unquote(self.auto_change_url))
+            with open(self.config_path, "w+", encoding="utf8") as f:
+                config_dict.write(f)
+        messagebox.showinfo('配置', '配置保存成功')
+        if self.auto_change_bz == "是":
+            self.th_auto_change_bz = threading.Thread(target=self.change_bz,
+                                                      args=(
+                                                          self.t_id, self.auto_change_time,
+                                                          self.auto_change_url, self.auto_change_page),
+                                                      daemon=True)
+            self.th_auto_change_bz.start()
+
+    def show_msg(self):
+        if not self.PATH or not self.src_name:
+            messagebox.showinfo('信息', '无法保存，谁让你上一次不保存呢！')
+            return
+        if not os.path.exists('save'):
+            os.mkdir('save')
+        with open(self.PATH, 'rb') as f:
+            with open('save/' + self.src_name, 'wb') as fd:
+                fd.write(f.read())
+        messagebox.showinfo('信息', '保存成功！')
+
+    def destroy(self):
+        super(Application, self).destroy()
+
+    # 登录
+    def is_login(self, auto_change_proxy, username, password, is_proxy="关闭"):
         index_url = 'https://wallhaven.cc/'
         login_url = 'https://wallhaven.cc/login'
         auth_login_url = 'https://wallhaven.cc/auth/login'
@@ -65,7 +250,7 @@ class AutoChangeBZ():
         }
         self.session = requests.Session()
         self.session.headers = headers
-        if auto_change_proxy:
+        if auto_change_proxy and is_proxy == "开启":
             self.session.proxies.update(proxies)
             self.session.trust_env = True
         else:
@@ -85,11 +270,16 @@ class AutoChangeBZ():
             _token = i['value']
             payload['_token'] = _token
         check_response = self.session.post(auth_login_url, data=payload)
-        if check_response.status_code == 200 and username in check_response.text:
+        print(check_response.url)
+        # print(check_response.text)
+        if check_response.url == f"https://wallhaven.cc/user/{username}":
             with open('cookies.txt', 'wb') as f:
                 pickle.dump(self.session.cookies, f)
+        else:
+            messagebox.showinfo('登录错误', '用户名或者密码错误，请重新设置！')
         return self.session
 
+    # 定时切换壁纸
     def change_bz(self, t_id, auto_change_time, auto_change_url, auto_change_page):
         while True:
             try:
@@ -102,45 +292,7 @@ class AutoChangeBZ():
                 messagebox.showerror('错误', '请重新启动！')
                 break
 
-    def main(self):
-        random_url = 'https://wallhaven.cc/search?sorting=random&ref=fp&seed=gLasU&page='
-        if os.path.isfile(self.config_path):
-            config_dict = configparser.ConfigParser()
-            config_dict.read(self.config_path, encoding="utf8")
-            auto_change_bz = config_dict.get("壁纸设置", '自动换壁纸')
-            auto_change_time = config_dict.get("壁纸设置", '换壁纸时间')
-            auto_change_url = config_dict.get('壁纸设置', '壁纸地址')
-            auto_change_img = config_dict.get('壁纸设置', '缓存地址')
-            auto_change_page = config_dict.get('壁纸设置', '壁纸页数')
-            auto_change_proxy = config_dict.get('壁纸设置', '代理地址')
-            username = config_dict.get('壁纸设置', '用户名')
-            password = config_dict.get('壁纸设置', '密码')
-        else:
-            with open(self.config_path, 'w', encoding='utf8') as f:
-                f.write('[壁纸设置]\n')
-                f.write('自动换壁纸 =\n')
-                f.write('换壁纸时间 =\n')
-                f.write('壁纸地址 =\n')
-                f.write('壁纸页数 =\n')
-                f.write('代理地址 =\n')
-                f.write('缓存地址 =\n')
-                f.write('用户名 =\n')
-                f.write('密码 =')
-            auto_change_bz = '是'
-            auto_change_time = 600
-            auto_change_url = random_url
-            auto_change_img = None
-            auto_change_page = 15
-            auto_change_proxy = ''
-            username = ''
-            password = ''
-
-        if username and password:
-            print('login')
-            self.is_login(auto_change_proxy, username, password)
-
-        return auto_change_bz, auto_change_time, auto_change_url, auto_change_img, auto_change_page, auto_change_proxy
-
+    # 手动切换壁纸
     def next_bz(self, auto_change_url, auto_change_page=15):
         base_url = 'https://w.wallhaven.cc/full/{src_type}/wallhaven-{src_name}'
         try:
@@ -148,7 +300,17 @@ class AutoChangeBZ():
                 page = 1
             else:
                 page = random.randrange(1, int(auto_change_page))
-            random_page_url = auto_change_url + str(page)
+            url_data = urlparse(auto_change_url)
+            url_query_dict = parse_qs(url_data.query)
+            url_query = f""
+            for key, value in url_query_dict.items():
+                if key == "page":
+                    continue
+                url_query += f"{key}={value[0]}&"
+            url_query += f"page={page}"
+            url_data = f"{url_data.scheme}://{url_data.netloc}{url_data.path}?"
+            random_page_url = url_data + url_query
+            # random_page_url = auto_change_url + str(page)
             print(random_page_url)
             if self.session:
                 print('login_session')
@@ -203,170 +365,162 @@ class AutoChangeBZ():
             print(src_num_url)
             messagebox.showerror('错误', "设置壁纸失败，那里出问题了我也不知道！可能是切换太频繁被限制了，等一会就好了。")
 
+class PanConfigWindow(tk.Toplevel):
+    def __init__(self, app, config_dict):
+        super().__init__()
+        self.title("设置")
+        # self.geometry("500x400")
+        self.row_num = 1
+        self.config_dict = config_dict
+        self._app = app
+        self.last_m = None
+        self.set_ui_o()
 
-class Application(Frame):
-    def __init__(self, master=None):
-        super().__init__(master)
-        self.config_path = config_path
-        self.master = master
-        self.width = 1280
-        self.height = 800
-        self.master.geometry("1280x800")
-        self.master.resizable(0, 0)
-        self.master.title(gui_title)
-        self.master.iconbitmap(resource_path(gui_logo))  # 设置图标，仅支持.ico文件
-        self.pack()
-        self.PATH, self.src_name = None, None
-        self.acbz = AutoChangeBZ()
-        self.auto_change_bz, self.auto_change_time, self.auto_change_url, self.auto_change_img, self.auto_change_page, self.auto_change_proxy = self.acbz.main()
-        if self.auto_change_img:
-            img = Image.open(self.auto_change_img)
-            pil_image_resized = self.resize(self.width, self.height, img)  # 缩放图像让它保持比例，同时限制在一个矩形框范围内  【调用函数，返回整改后的图片】
-            self.img = ImageTk.PhotoImage(pil_image_resized)  # 把PIL图像对象转变为Tkinter的PhotoImage对象  【转换格式，方便在窗口展示】
-        else:
-            self.img = None
-        self.create_widgets()
-        self.th_listen_listen_bz_change: threading.Thread = threading.Thread(target=self.listen_bz_change, args=(),
-                                                                             daemon=True)
-        self.th_listen_listen_bz_change.start()
+    def set_ui_o(self):
+        row_b = tk.Frame(self, width=200, height=35)
+        row_b.grid(row=0, column=0, padx=10, pady=10)
 
-    def create_widgets(self):
-        self.L1 = Label(self, text="壁纸地址：")
-        self.L1.pack(padx=5, pady=10, side=LEFT)
+        b_c = [("设置", self.b1_cmd), ("用户", self.b2_cmd), ("代理", self.b3_cmd)]
+        for index, bc in enumerate(b_c):
+            b, c = bc
+            bv = tk.Button(row_b, text=b, command=c)
+            bv.grid(row=index, column=0, pady=3)
 
-        self.E1 = Entry(self, bd=5, width=65)
-        contents = StringVar()
-        contents.set(self.auto_change_url)
-        self.E1["textvariable"] = contents
-        self.E1.pack(padx=5, pady=10, side=LEFT)
+        self.b1_cmd()
 
-        self.L5 = Label(self, text="代理：")
-        self.L5.pack(padx=5, pady=10, side=LEFT)
+        row_q = tk.Frame(self, bg='green', width=200, height=35)
+        row_q.grid(row=1, column=1)
+        tk.Button(row_q, text="取消", command=self.cancel).pack(side=tk.RIGHT)
+        tk.Button(row_q, text="确定", command=self.ok).pack(side=tk.RIGHT)
 
-        self.E5 = Entry(self, bd=5, width=20)
-        contents = StringVar()
-        contents.set(self.auto_change_proxy)
-        self.E5["textvariable"] = contents
-        self.E5.pack(padx=5, pady=10, side=LEFT)
+    def grid_ui_config(self, row_c):
+        padx, pady = 5, 5
 
-        self.L2 = Label(self, text="自动更换：")
-        self.L2.pack(padx=5, pady=10, side=LEFT)
-
-        self.E2 = ttk.Combobox(self, width=2)  # 初始化
+        l1 = tk.Label(row_c, text='自动切换壁纸：', width=15)
+        l1.grid(row=0, column=0, pady=pady, padx=padx)
+        self.auto_change_config = ttk.Combobox(row_c, width=2)  # 初始化
         is_auto_change = ("是", "否")
-        self.E2["value"] = is_auto_change
-        self.E2.current(is_auto_change.index(self.auto_change_bz))
-        self.E2.pack(padx=5, pady=10, side=LEFT)
+        self.auto_change_config["value"] = is_auto_change
+        self.auto_change_config.current(is_auto_change.index(self._app.auto_change_bz))
+        self.auto_change_config.grid(row=0, column=1, pady=pady, padx=padx)
 
-        self.L3 = Label(self, text="时间：")
-        self.L3.pack(padx=5, pady=10, side=LEFT)
+        l2 = tk.Label(row_c, text='壁纸切换间隔 ：', width=15)
+        l2.grid(row=1, column=0, pady=pady, padx=padx)
+        self.auto_change_time_config = tk.IntVar()
+        self.auto_change_time_config.set(self._app.auto_change_time)
+        e2 = tk.Entry(row_c, textvariable=self.auto_change_time_config, width=20)
+        e2.grid(row=1, column=1, pady=pady, padx=padx)
 
-        self.E3 = Entry(self, bd=5, width=4)
-        contents = IntVar()
-        contents.set(self.auto_change_time)
-        self.E3["textvariable"] = contents
-        self.E3.pack(padx=5, pady=10, side=LEFT)
+        l3 = tk.Label(row_c, text='壁纸页数 ：', width=15)
+        l3.grid(row=2, column=0, pady=pady, padx=padx)
+        self.auto_change_page_config = tk.IntVar()
+        self.auto_change_page_config.set(self._app.auto_change_page)
+        e3 = tk.Entry(row_c, textvariable=self.auto_change_page_config, width=8)
+        e3.grid(row=2, column=1, pady=pady, padx=padx)
 
-        self.L4 = Label(self, text="总页数：")
-        self.L4.pack(padx=5, pady=10, side=LEFT)
+    def grid_user_config(self, row_c):
+        padx, pady = 5, 5
 
-        self.E4 = Entry(self, bd=5, width=4)
-        contents = IntVar()
-        contents.set(self.auto_change_page)
-        self.E4["textvariable"] = contents
-        self.E4.pack(padx=5, pady=10, side=LEFT)
+        l1 = tk.Label(row_c, text='用户名：', width=15)
+        l1.grid(row=0, column=0, pady=pady, padx=padx)
+        self.username = tk.StringVar()
+        self.username.set(self._app.username)
+        e1 = tk.Entry(row_c, textvariable=self.username, width=20)
+        e1.grid(row=0, column=1, pady=pady, padx=padx)
 
-        self.B2 = Button(self, text="确定", command=self.get_config)
-        self.B2.pack(padx=5, pady=10, side=LEFT)
+        # 第二行
+        l2 = tk.Label(row_c, text='密码：', width=15)
+        l2.grid(row=1, column=0, pady=pady, padx=padx)
+        self.password = tk.StringVar()
+        self.password.set(self._app.password)
+        e2 = tk.Entry(row_c, textvariable=self.password, width=20)
+        e2.grid(row=1, column=1, pady=pady, padx=padx)
 
-        self.B1 = Button(self, text="切换", command=self.next_bz)
-        self.B1.pack(padx=20, pady=10, side=LEFT)
-        self.B3 = Button(self, text="保存", command=self.show_msg)
-        self.B3.pack(padx=5, pady=10, side=LEFT)
+    def grid_proxy_config(self, row_c):
+        padx, pady = 5, 5
+        l1 = tk.Label(row_c, text='协议 ：', width=15)
+        l1.grid(row=0, column=0, pady=pady, padx=padx)
+        self.is_http_config = ttk.Combobox(row_c, width=20)  # 初始化
+        is_http = ("", "https", "http")
+        self.is_http_config["value"] = is_http
+        self.is_http_config.current(is_http.index(self.config_dict['is_http']))
+        self.is_http_config.grid(row=0, column=1, pady=pady, padx=padx)
 
-        self.l = Label(self.master, image=self.img, height=self.height, width=self.width)
-        self.l.pack(padx=5, pady=10)
+        l2 = tk.Label(row_c, text='host ：', width=15)
+        l2.grid(row=1, column=0, pady=pady, padx=padx)
+        self.host = tk.StringVar()
+        self.host.set(self.config_dict['host'])
+        e2 = tk.Entry(row_c, textvariable=self.host, width=20)
+        e2.grid(row=1, column=1, pady=pady, padx=padx)
 
-    def resize(self, w_box, h_box, pil_image):  # 参数是：要适应的窗口宽、高、Image.open后的图片
-        w, h = pil_image.size  # 获取图像的原始大小
-        f1 = 1.0 * w_box / w
-        f2 = 1.0 * h_box / h
-        factor = min([f1, f2])
-        width = int(w * factor)
-        height = int(h * factor)
-        return pil_image.resize((width, height), Image.ANTIALIAS)
+        l3 = tk.Label(row_c, text='端口 ：', width=15)
+        l3.grid(row=2, column=0, pady=pady, padx=padx)
+        self.port = tk.StringVar()
+        self.port.set(self.config_dict['port'])
+        e3 = tk.Entry(row_c, textvariable=self.port, width=20)
+        e3.grid(row=2, column=1, pady=pady, padx=padx)
 
-    def listen_bz_change(self):
-        while True:
-            item = q.get()
-            if item is None:
-                break
-            path_dict = json.loads(item)
-            self.PATH = path_dict['path']
-            self.src_name = path_dict['src_name']
-            img = Image.open(self.PATH)
-            pil_image_resized = self.resize(self.width, self.height, img)  # 缩放图像让它保持比例，同时限制在一个矩形框范围内  【调用函数，返回整改后的图片】
-            tk_image = ImageTk.PhotoImage(pil_image_resized)  # 把PIL图像对象转变为Tkinter的PhotoImage对象  【转换格式，方便在窗口展示】
-            self.l.configure(image=tk_image)
+        l3 = tk.Label(row_c, text='启用代理 ：', width=15)
+        l3.grid(row=3, column=0, pady=pady, padx=padx)
+        self.is_proxy_config = ttk.Combobox(row_c, width=20)  # 初始化
+        is_proxy = ("开启", "关闭")
+        self.is_proxy_config["value"] = is_proxy
+        self.is_proxy_config.current(is_proxy.index(self.config_dict['is_proxy']))
+        self.is_proxy_config.grid(row=3, column=1, pady=pady, padx=padx)
 
-    def get_config(self):
-        self.acbz.t_id += 1
-        self.auto_change_bz = self.E2.get()
-        self.auto_change_time = self.E3.get()
-        self.auto_change_url = self.E1.get()
-        self.auto_change_page = self.E4.get()
-        self.auto_change_proxy = self.E5.get()
-        if os.path.isfile(self.config_path):
-            config_dict = configparser.ConfigParser()
-            config_dict.read(self.config_path, encoding="utf8")
-            config_dict.set("壁纸设置", '自动换壁纸', self.auto_change_bz)
-            config_dict.set("壁纸设置", '换壁纸时间', self.auto_change_time)
-            config_dict.set('壁纸设置', '壁纸地址', unquote(self.auto_change_url))
-            config_dict.set('壁纸设置', '壁纸页数', self.auto_change_page)
-            config_dict.set('壁纸设置', '代理地址', self.auto_change_proxy)
-            with open(self.config_path, "w+", encoding="utf8") as f:
-                config_dict.write(f)
-        messagebox.showinfo('配置', '配置保存成功')
-        if self.acbz.session:
-            proxies = {
-                'https': self.auto_change_proxy,
-                'http': self.auto_change_proxy
-            }
-            self.acbz.session.proxies.update(proxies)
-            if self.auto_change_proxy:
-                self.acbz.session.trust_env = True
-            else:
-                self.acbz.session.trust_env = False
+    def b1_cmd(self):
+        if self.last_m:
+            self.change_value()
+            self.last_m.destroy()
+        row_c = tk.Frame(self, width=200, height=35)
+        row_c.grid(row=0, column=1, pady=10)
+        self.grid_ui_config(row_c)
+        self.last_m = row_c
+        self.row_num = 1
 
-        if self.auto_change_bz == "是":
-            self.th_auto_change_bz = threading.Thread(target=self.acbz.change_bz,
-                                                      args=(
-                                                          self.acbz.t_id, self.auto_change_time,
-                                                          self.auto_change_url, self.auto_change_page),
-                                                      daemon=True)
-            self.th_auto_change_bz.start()
+    def b2_cmd(self):
+        if self.last_m:
+            self.change_value()
+            self.last_m.destroy()
+        row_c = tk.Frame(self, width=200, height=35)
+        row_c.grid(row=0, column=1)
+        self.grid_user_config(row_c)
+        self.last_m = row_c
+        self.row_num = 2
 
-    def next_bz(self):
-        self.th_next_bz = threading.Thread(target=self.acbz.next_bz,
-                                           args=(self.auto_change_url, self.auto_change_page),
-                                           daemon=True)
-        self.th_next_bz.start()
+    def b3_cmd(self):
+        if self.last_m:
+            self.change_value()
+            self.last_m.destroy()
+        row_c = tk.Frame(self, width=200, height=35)
+        row_c.grid(row=0, column=1)
+        self.grid_proxy_config(row_c)
+        self.last_m = row_c
+        self.row_num = 3
 
-    def show_msg(self):
-        if not self.PATH or not self.src_name:
-            messagebox.showinfo('信息', '无法保存，谁让你上一次不保存呢！')
-            return
-        if not os.path.exists('save'):
-            os.mkdir('save')
-        with open(self.PATH, 'rb') as f:
-            with open('save/' + self.src_name, 'wb') as fd:
-                fd.write(f.read())
-        messagebox.showinfo('信息', '保存成功！')
+    def change_value(self):
+        if self.row_num == 1:
+            self.config_dict['bz'] = self.auto_change_config.get()
+            self.config_dict['time'] = self.auto_change_time_config.get()
+            self.config_dict['page'] = self.auto_change_page_config.get()
+        elif self.row_num == 2:
+            self.config_dict['username'] = self.username.get()
+            self.config_dict['password'] = self.password.get()
+        elif self.row_num == 3:
+            self.config_dict['is_http'] = self.is_http_config.get()
+            self.config_dict['host'] = self.host.get()
+            self.config_dict['port'] = self.port.get()
+            self.config_dict['is_porxy'] = self.is_proxy_config.get()
 
-    def destroy(self):
-        super(Application, self).destroy()
+    def ok(self):
+        self.change_value()
+        self.destroy()  # 销毁窗口
 
+    def cancel(self):
+        self.config_dict = None  # 空！
+        self.destroy()
 
+# 最小化
 class SysTrayIcon(object):
     '''SysTrayIcon类用于显示任务栏图标'''
     QUIT = 'QUIT'
@@ -426,7 +580,9 @@ class SysTrayIcon(object):
                                        0, 0, hinst, None)
         win32gui.UpdateWindow(s.hwnd)
         s.notify_id = None
-        s.refresh(title='壁纸软件已后台！', msg='点击重新打开', time=500)
+        # 提示没有什么用 烦人
+        # s.refresh(title='壁纸软件已后台！', msg='点击重新打开', time=500)
+        s.refresh()
 
         win32gui.PumpMessages()
 
@@ -571,39 +727,34 @@ class SysTrayIcon(object):
             menu_action(s)
 
 
+# 主程序
 class _Main:  # 调用SysTrayIcon的Demo窗口
     def __init__(s):
         s.SysTrayIcon = None  # 判断是否打开系统托盘图标
 
     def main(s):
         # tk窗口
-        s.root = Tk()
+        s.root = tk.Tk()
         s.app = Application(master=s.root)
-        s.root.bind("<Unmap>",
-                    lambda event: s.Hidden_window() if s.root.state() == 'iconic' else False)  # 窗口最小化判断，可以说是调用最重要的一步
-        s.root.protocol('WM_DELETE_WINDOW', s.exit)  # 点击Tk窗口关闭时直接调用s.exit，不使用默认关闭
+        # iconify 最小化 normal 正常 zoom 最大化
+        # s.root.bind("<Unmap>",lambda event: s.Hidden_window() if s.root.state() == 'iconic' else False)  # 窗口最小化判断，可以说是调用最重要的一步
+        # s.root.protocol('WM_DELETE_WINDOW', s.exit)  # 点击Tk窗口关闭时直接调用s.exit，不使用默认关闭
+        s.root.protocol('WM_DELETE_WINDOW', s.Hidden_window)  # 点击Tk窗口关闭时,设置最小化
+
         s.root.mainloop()
-
-    def switch_icon(s, _sysTrayIcon, icon=resource_path(gui_logo)):
-        # 点击右键菜单项目会传递SysTrayIcon自身给引用的函数，所以这里的_sysTrayIcon = s.sysTrayIcon
-        # 只是一个改图标的例子，不需要的可以删除此函数
-        _sysTrayIcon.icon = icon
-        _sysTrayIcon.refresh()
-
-        # 气泡提示的例子
-        s.show_msg(title='图标更换', msg='图标更换成功！', time=500)
-
-    def show_msg(s, title='壁纸', msg='喔喔喔喔', time=500):
-        s.SysTrayIcon.refresh(title=title, msg=msg, time=time)
 
     def Hidden_window(s, icon=resource_path(gui_logo), hover_text="壁纸"):
         '''隐藏窗口至托盘区，调用SysTrayIcon的重要函数'''
 
         # 托盘图标右键菜单, 格式: ('name', None, callback),下面也是二级菜单的例子
         # 24行有自动添加‘退出’，不需要的可删除
-        # menu_options = (('一级 菜单', None, s.switch_icon),
-        #                 ('二级 菜单', None, (('更改 图标', None, s.switch_icon),)))
-        menu_options = ()
+        menu_options = (
+            ('切换壁纸', None, s.handle_change_bz),
+            ('设置', None, s.handle_set_config),
+            ('代理', None, (('开启', None, s.handle_proxy), ('关闭', None, s.handle_proxy)))
+        )
+        # ('二级 菜单', None, (('更改 图标', None, s.switch_icon),)))
+        # menu_options = ()
         s.root.withdraw()  # 隐藏tk窗口
         if not s.SysTrayIcon: s.SysTrayIcon = SysTrayIcon(
             icon,  # 图标
@@ -616,6 +767,79 @@ class _Main:  # 调用SysTrayIcon的Demo窗口
 
     def exit(s, _sysTrayIcon=None):
         s.root.destroy()
+
+    def show_msg(s, title='壁纸', msg='喔喔喔喔', time=500):
+        s.SysTrayIcon.refresh(title=title, msg=msg, time=time)
+
+    def switch_icon(s, _sysTrayIcon, icon=resource_path(gui_logo)):
+        # 点击右键菜单项目会传递SysTrayIcon自身给引用的函数，所以这里的_sysTrayIcon = s.sysTrayIcon
+        # 只是一个改图标的例子，不需要的可以删除此函数
+        _sysTrayIcon.icon = icon
+        _sysTrayIcon.refresh()
+
+        # 气泡提示的例子
+        s.show_msg(title='图标更换', msg='图标更换成功！', time=500)
+
+    def handle_proxy(s,_sysTrayIcon):
+        print(_sysTrayIcon)
+
+    def handle_change_bz(s, _sysTrayIcon):
+        s.app.button_next_bz()
+
+    def handle_set_config(s, _sysTrayIcon):
+        config_dict = {
+            "bz": s.app.auto_change_bz,
+            "time": s.app.auto_change_time,
+            "page": s.app.auto_change_page,
+            "username": s.app.username,
+            "password": s.app.password,
+            "is_http": s.app.auto_change_proxy.split("://")[0],
+            "host": s.app.auto_change_proxy.split("://")[-1].split(":")[0],
+            "port": s.app.auto_change_proxy.rsplit(":", 1)[-1].split(":")[0],
+            "is_proxy": s.app.is_proxy
+        }
+        copy_config_dict = copy.deepcopy(config_dict)
+        inputDialog = PanConfigWindow(s.app, copy_config_dict)
+
+        s.root.wait_window(inputDialog)  # 这一句很重要！！！
+        if inputDialog.config_dict != None and inputDialog.config_dict != config_dict:
+            print("in")
+            print(inputDialog.config_dict)
+            print(config_dict)
+            s.app.auto_change_bz, s.app.auto_change_time, s.app.auto_change_page, s.app.username, s.app.password, is_http, host, port, s.app.is_proxy = inputDialog.config_dict.values()
+            if is_http and host and port:
+                s.app.auto_change_proxy = f"{is_http}://{host}:{port}"
+            else:
+                s.app.auto_change_proxy = ""
+            if os.path.isfile(s.app.config_path):
+                config_dict = configparser.ConfigParser()
+                config_dict.read(s.app.config_path, encoding="utf8")
+                config_dict.set("壁纸设置", '自动换壁纸', s.app.auto_change_bz)
+                config_dict.set("壁纸设置", '换壁纸时间', str(s.app.auto_change_time))
+                config_dict.set('壁纸设置', '壁纸页数', str(s.app.auto_change_page))
+                config_dict.set('壁纸设置', '代理地址', s.app.auto_change_proxy)
+                config_dict.set('壁纸设置', '用户名', s.app.username)
+                config_dict.set('壁纸设置', '密码', s.app.password)
+                config_dict.set('壁纸设置', '是否启用代理', s.app.is_proxy)
+                with open(s.app.config_path, "w+", encoding="utf8") as f:
+                    config_dict.write(f)
+            # messagebox.showinfo('配置', '配置保存成功')
+
+            if inputDialog.config_dict['username'] != config_dict['username'] or inputDialog.config_dict['password'] != \
+                    config_dict['password']:
+                s.app.is_login(s.app.auto_change_proxy, s.app.username, s.app.password, s.app.is_proxy)
+            elif s.app.session:
+                proxies = {
+                    'https': s.app.auto_change_proxy,
+                    'http': s.app.auto_change_proxy
+                }
+                s.app.session.proxies.update(proxies)
+                if s.app.is_proxy == "是":
+                    s.app.session.trust_env = True
+                else:
+                    s.app.session.trust_env = False
+
+
 
 
 if __name__ == '__main__':
