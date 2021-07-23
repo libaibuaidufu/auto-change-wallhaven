@@ -177,26 +177,26 @@ class Application(tk.Frame):
             password = config_dict.get('壁纸设置', '密码')
             is_proxy = config_dict.get('壁纸设置', '是否启用代理')
         else:
-            with open(self.config_path, 'w', encoding='utf8') as f:
-                f.write('[壁纸设置]\n')
-                f.write('自动换壁纸 =\n')
-                f.write('换壁纸时间 =\n')
-                f.write('壁纸地址 =\n')
-                f.write('壁纸页数 =\n')
-                f.write('代理地址 =\n')
-                f.write('缓存地址 =\n')
-                f.write('用户名 =\n')
-                f.write('密码 =\n')
-                f.write('是否启用代理 =')
-            auto_change_bz = '是'
-            auto_change_time = 600
+            auto_change_bz = '否'
+            auto_change_time = '600'
             auto_change_url = random_url
             auto_change_img = None
-            auto_change_page = 15
+            auto_change_page = '15'
             auto_change_proxy = ''
             username = ''
             password = ''
             is_proxy = "关闭"
+            with open(self.config_path, 'w', encoding='utf8') as f:
+                f.write('[壁纸设置]\n')
+                f.write(f'自动换壁纸 = {auto_change_bz}\n')
+                f.write(f'换壁纸时间 = {auto_change_time}\n')
+                f.write(f'壁纸地址 = {auto_change_url}\n')
+                f.write(f'壁纸页数 = {auto_change_page}\n')
+                f.write('代理地址 =\n')
+                f.write('缓存地址 =\n')
+                f.write('用户名 =\n')
+                f.write('密码 =\n')
+                f.write(f'是否启用代理 = {is_proxy}')
 
         return auto_change_bz, auto_change_time, auto_change_url, auto_change_img, auto_change_page, auto_change_proxy, username, password, is_proxy
 
