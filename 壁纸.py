@@ -33,7 +33,6 @@ gui_title = '壁纸'
 gui_logo = '钱袋.ico'
 
 
-# https://wallhaven.cc/search?categories=110&purity=100&atleast=2560x1440&topRange=1M&sorting=toplist&order=desc&page=2
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
     base_path = getattr(tk.sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
@@ -85,7 +84,7 @@ class Application(tk.Frame):
 
         self.create_session(self.auto_change_proxy, self.is_proxy)
 
-        if self.username and self.password :
+        if self.username and self.password:
             print('login')
             try:
                 self.is_login(self.username, self.password)
@@ -244,7 +243,7 @@ class Application(tk.Frame):
                                                       daemon=True)
             self.th_auto_change_bz.start()
         else:
-            self.next_bz(self.auto_change_url, self.auto_change_page)
+            self.button_next_bz()
 
     def show_msg(self):
         if not self.PATH or not self.src_name:
