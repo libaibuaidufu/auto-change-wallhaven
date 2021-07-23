@@ -37,7 +37,7 @@ pyinstaller -F -w 壁纸.py -i 钱袋.ico --add-data 钱袋.ico;.  --upx-dir=upx
 
 ```
 [壁纸设置]
-自动换壁纸 = 是
+自动换壁纸 = 否
 换壁纸时间 = 600
 壁纸地址 = https://wallhaven.cc/favorites?page=
 壁纸页数 = 10
@@ -45,6 +45,7 @@ pyinstaller -F -w 壁纸.py -i 钱袋.ico --add-data 钱袋.ico;.  --upx-dir=upx
 缓存地址 = 
 用户名 = username
 密码 = password
+是否启用代理 = 关闭
 ```
 
 #### 自定义
