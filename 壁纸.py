@@ -13,11 +13,10 @@ import os
 import pickle
 import queue
 import random
+import tempfile
 import threading
 import time
 import tkinter as tk
-import urllib
-import urllib.request
 from tkinter import messagebox, ttk
 from urllib.parse import unquote, urlparse, parse_qs
 
@@ -34,6 +33,7 @@ gui_title = '壁纸'
 gui_logo = '钱袋.ico'
 
 
+# https://wallhaven.cc/search?categories=110&purity=100&atleast=2560x1440&topRange=1M&sorting=toplist&order=desc&page=2
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
     base_path = getattr(tk.sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
@@ -47,7 +47,17 @@ class Application(tk.Frame):
         self.master = master
         self.width = 1280
         self.height = 800
-        self.master.geometry("1280x800")
+        sw = self.winfo_screenwidth()
+        # 得到屏幕宽度
+        sh = self.winfo_screenheight()
+        # 得到屏幕高度
+        ww = 1280
+        wh = 800
+        # 窗口宽高为100
+        x = (sw - ww) / 2
+        y = (sh - wh) / 2
+        self.master.geometry("%dx%d+%d+%d" % (ww, wh, x, y))
+        # self.master.geometry("1280x800")
         self.master.resizable(0, 0)
         self.master.title(gui_title)
         self.master.iconbitmap(resource_path(gui_logo))  # 设置图标，仅支持.ico文件
@@ -55,25 +65,38 @@ class Application(tk.Frame):
         self.PATH, self.src_name = None, None
 
         self.t_id = 0  # 线程控制
-        self.session = None
-
-        # self = AutoChangeBZ()
+        self.no_proxies = {
+            'https': "",
+            'http': ""
+        }
+        self.resolution = "1920x1080"
         self.auto_change_bz, self.auto_change_time, self.auto_change_url, self.auto_change_img, self.auto_change_page, self.auto_change_proxy, self.username, self.password, self.is_proxy = self.get_config()
-        if self.username and self.password:
-            print('login')
-            self.is_login(self.auto_change_proxy, self.username, self.password, self.is_proxy)
-
         if self.auto_change_img:
             img = Image.open(self.auto_change_img)
             pil_image_resized = self.resize(self.width, self.height, img)  # 缩放图像让它保持比例，同时限制在一个矩形框范围内  【调用函数，返回整改后的图片】
             self.img = ImageTk.PhotoImage(pil_image_resized)  # 把PIL图像对象转变为Tkinter的PhotoImage对象  【转换格式，方便在窗口展示】
         else:
             self.img = None
-
         self.create_widgets()
+
         self.th_listen_listen_bz_change: threading.Thread = threading.Thread(target=self.listen_bz_change, args=(),
                                                                              daemon=True)
         self.th_listen_listen_bz_change.start()
+
+        self.create_session(self.auto_change_proxy, self.is_proxy)
+
+        if self.username and self.password:
+            print('login')
+            try:
+                self.is_login(self.username, self.password)
+            except requests.exceptions.SSLError and requests.exceptions.ConnectionError:
+                self.set_proxy(self.auto_change_proxy, is_proxy="关闭")
+                try:
+                    self.is_login(self.username, self.password)
+                except Exception:
+                    print('login_fail')
+            except Exception:
+                print('login_fail')
 
     def create_widgets(self):
         # https://wallhaven.cc/latest
@@ -83,25 +106,29 @@ class Application(tk.Frame):
         # https://wallhaven.cc/untagged
         self.L1 = tk.Label(self, text="自定义壁纸地址：")
         self.L1.pack(padx=5, pady=10, side=tk.LEFT)
-
         url_list = ["https://wallhaven.cc/latest", 'https://wallhaven.cc/hot', 'https://wallhaven.cc/toplist',
                     'https://wallhaven.cc/random', 'https://wallhaven.cc/untagged']
         self.E1 = ttk.Combobox(self, width=65)
         self.E1["value"] = url_list
         self.E1.set(self.auto_change_url)
         self.E1.pack(padx=5, pady=10, side=tk.LEFT)
-
         self.B4 = tk.Button(self, text="确定", command=self.button_set_url_config)
         self.B4.pack(padx=5, pady=10, side=tk.LEFT)
 
+        self.L3 = tk.Label(self, text="分辨率：")
+        self.L3.pack(padx=5, pady=10, side=tk.LEFT)
+        respicker_list = ['', '1600×900', '1920×1080', "2560×1440", '3840×2160']
+        self.E3 = ttk.Combobox(self, width=10)
+        self.E3["value"] = respicker_list
+        self.E3.set(self.resolution)
+        self.E3.pack(padx=5, pady=10, side=tk.LEFT)
+
         self.L2 = tk.Label(self, text="搜索词：")
         self.L2.pack(padx=5, pady=10, side=tk.LEFT)
-
         self.E2 = tk.Entry(self, bd=5, width=15)
         contents = tk.StringVar()
         self.E2["textvariable"] = contents
         self.E2.pack(padx=5, pady=10, side=tk.LEFT)
-
         self.B2 = tk.Button(self, text="搜索", command=self.button_search)
         self.B2.pack(padx=5, pady=10, side=tk.LEFT)
 
@@ -148,7 +175,7 @@ class Application(tk.Frame):
             auto_change_proxy = config_dict.get('壁纸设置', '代理地址')
             username = config_dict.get('壁纸设置', '用户名')
             password = config_dict.get('壁纸设置', '密码')
-            is_porxy = config_dict.get('壁纸设置', '是否启用代理')
+            is_proxy = config_dict.get('壁纸设置', '是否启用代理')
         else:
             with open(self.config_path, 'w', encoding='utf8') as f:
                 f.write('[壁纸设置]\n')
@@ -169,9 +196,9 @@ class Application(tk.Frame):
             auto_change_proxy = ''
             username = ''
             password = ''
-            is_porxy = "关闭"
+            is_proxy = "关闭"
 
-        return auto_change_bz, auto_change_time, auto_change_url, auto_change_img, auto_change_page, auto_change_proxy, username, password, is_porxy
+        return auto_change_bz, auto_change_time, auto_change_url, auto_change_img, auto_change_page, auto_change_proxy, username, password, is_proxy
 
     def button_next_bz(self):
         self.th_next_bz = threading.Thread(target=self.next_bz,
@@ -230,16 +257,7 @@ class Application(tk.Frame):
     def destroy(self):
         super(Application, self).destroy()
 
-    # 登录
-    def is_login(self, auto_change_proxy, username, password, is_proxy="关闭"):
-        index_url = 'https://wallhaven.cc/'
-        login_url = 'https://wallhaven.cc/login'
-        auth_login_url = 'https://wallhaven.cc/auth/login'
-        payload = {
-            '_token': (None, ''),
-            'username': (None, username),
-            'password': (None, password)
-        }
+    def create_session(self, auto_change_proxy, is_proxy="关闭"):
         headers = {
             'User-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36',
             'referer': 'https://wallhaven.cc/login'
@@ -250,36 +268,81 @@ class Application(tk.Frame):
         }
         self.session = requests.Session()
         self.session.headers = headers
-        if auto_change_proxy and is_proxy == "开启":
+        if is_proxy == "开启":
+            print("开启代理了")
             self.session.proxies.update(proxies)
             self.session.trust_env = True
         else:
+            self.session.proxies.update(self.no_proxies)
             self.session.trust_env = False
-        if os.path.exists('cookies.txt'):
-            with open('cookies.txt', 'rb') as f:
-                self.session.cookies.update(pickle.load(f))
+        return self.session
 
-            check_response = self.session.get(index_url)
-            if username in check_response.text:
-                print('use cookies')
-                return self.session
+    # 登录
+    def is_login(self, username, password, is_use_cookie=True):
+        index_url = 'https://wallhaven.cc/'
+        login_url = 'https://wallhaven.cc/login'
+        auth_login_url = 'https://wallhaven.cc/auth/login'
+        payload = {
+            '_token': (None, ''),
+            'username': (None, username),
+            'password': (None, password)
+        }
+        if is_use_cookie:
+            if os.path.exists('cookies.txt'):
+                with open('cookies.txt', 'rb') as f:
+                    self.session.cookies.update(pickle.load(f))
+                check_response = self.session.get(index_url)
+                if username in check_response.text:
+                    self.master.title(gui_title + f"-{username}")
+                    print('use cookies')
+                    return
         login_response = self.session.get(login_url)
         bf = BeautifulSoup(login_response.text, 'html.parser')
         hidden = bf.find_all('input', {'type': 'hidden'})
         for i in hidden:
             _token = i['value']
             payload['_token'] = _token
+
         check_response = self.session.post(auth_login_url, data=payload)
         print(check_response.url)
-        # print(check_response.text)
-        if check_response.url == f"https://wallhaven.cc/user/{username}":
+        if check_response.url in (f"https://wallhaven.cc/user/{username}", 'https://wallhaven.cc'):
             with open('cookies.txt', 'wb') as f:
                 pickle.dump(self.session.cookies, f)
+            self.master.title(gui_title + f"-{username}")
         else:
             messagebox.showinfo('登录错误', '用户名或者密码错误，请重新设置！')
-        return self.session
+        return
 
-    # 定时切换壁纸
+        # 定时切换壁纸
+
+    def set_proxy(self, auto_change_proxy, is_proxy):
+        if is_proxy == "关闭":
+            print('关闭代理')
+            self.is_proxy = "关闭"
+            if os.path.isfile(self.config_path):
+                config_dict = configparser.ConfigParser()
+                config_dict.read(self.config_path, encoding="utf8")
+                config_dict.set('壁纸设置', '是否启用代理', self.is_proxy)
+                with open(self.config_path, "w+", encoding="utf8") as f:
+                    config_dict.write(f)
+            self.session.proxies.update(self.no_proxies)
+            self.session.trust_env = False
+        elif is_proxy == '开启':
+            print('开启代理')
+            self.is_proxy = "开启"
+            if os.path.isfile(self.config_path):
+                config_dict = configparser.ConfigParser()
+                config_dict.read(self.config_path, encoding="utf8")
+                config_dict.set('壁纸设置', '是否启用代理', self.is_proxy)
+                with open(self.config_path, "w+", encoding="utf8") as f:
+                    config_dict.write(f)
+            proxies = {
+                'https': auto_change_proxy,
+                'http': auto_change_proxy
+            }
+            self.session.proxies.update()
+            self.session.trust_env = True
+
     def change_bz(self, t_id, auto_change_time, auto_change_url, auto_change_page):
         while True:
             try:
@@ -294,6 +357,7 @@ class Application(tk.Frame):
 
     # 手动切换壁纸
     def next_bz(self, auto_change_url, auto_change_page=15):
+        print('切换图片')
         base_url = 'https://w.wallhaven.cc/full/{src_type}/wallhaven-{src_name}'
         try:
             if int(auto_change_page) <= 1:
@@ -307,23 +371,14 @@ class Application(tk.Frame):
                 if key == "page":
                     continue
                 url_query += f"{key}={value[0]}&"
+            if self.resolution:
+                url_query += f'atleast={self.resolution}&'
             url_query += f"page={page}"
             url_data = f"{url_data.scheme}://{url_data.netloc}{url_data.path}?"
             random_page_url = url_data + url_query
-            # random_page_url = auto_change_url + str(page)
             print(random_page_url)
-            if self.session:
-                print('login_session')
-                response = self.session.get(random_page_url)
-                soup: BeautifulSoup = BeautifulSoup(response.text, 'html.parser')
-            else:
-                print('not_login_session')
-                opener = urllib.request.build_opener()
-                opener.addheaders = [('User-agent', 'Mozilla/5.0')]  # 给这个opener设置header #'Mozilla/5.0'
-                urllib.request.install_opener(opener)  # 安装这个opener的表头header,用于模拟浏览器.如果不模拟浏览器,下面的代码会404
-                with urllib.request.urlopen(random_page_url) as f:
-                    response = f.read().decode('utf-8')
-                soup: BeautifulSoup = BeautifulSoup(response, 'html.parser')
+            response = self.session.get(random_page_url)
+            soup: BeautifulSoup = BeautifulSoup(response.text, 'html.parser')
             div_tag = soup.find('section', class_='thumb-listing-page')
             li_list = div_tag.find_all('li')
             bz_num = random.randrange(0, len(li_list) - 1)
@@ -344,10 +399,13 @@ class Application(tk.Frame):
             return
         print('更换壁纸中')
         try:
-            opener = urllib.request.build_opener()  # 创建一个opener
-            opener.addheaders = [('User-agent', 'Mozilla/5.0')]  # 给这个opener设置header #'Mozilla/5.0'
-            urllib.request.install_opener(opener)  # 安装这个opener的表头header,用于模拟浏览器.如果不模拟浏览器,下面的代码会404
-            PATH = urllib.request.urlretrieve(src_num_url)[0]  # 获取处理图片地址
+            img_type = src_num_url.rsplit('.')[-1]
+            resp = self.session.get(src_num_url)
+            tfp = tempfile.NamedTemporaryFile(suffix='.' + img_type, delete=False)
+            with tfp:
+                tfp.write(resp.content)
+            PATH = tfp.name
+            print(PATH)
             ctypes.windll.user32.SystemParametersInfoW(20, 0, PATH, 3)  # 设置桌面
             print('壁纸更换完毕')
             config_dict = configparser.ConfigParser()
@@ -370,9 +428,20 @@ class PanConfigWindow(tk.Toplevel):
     def __init__(self, app, config_dict):
         super().__init__()
         self.title("设置")
+        sw = self.winfo_screenwidth()
+        # 得到屏幕宽度
+        sh = self.winfo_screenheight()
+        # 得到屏幕高度
+        ww = 400
+        wh = 200
+        # 窗口宽高为100
+        x = (sw - ww) / 2
+        y = (sh - wh) / 2
+        self.geometry("%dx%d+%d+%d" % (ww, wh, x, y))
         # self.geometry("500x400")
         self.row_num = 1
-        self.config_dict = config_dict
+        self.base_config_dict = config_dict
+        self.config_dict = copy.deepcopy(config_dict)
         self._app = app
         self.last_m = None
         self.set_ui_o()
@@ -502,8 +571,8 @@ class PanConfigWindow(tk.Toplevel):
     def change_value(self):
         if self.row_num == 1:
             self.config_dict['bz'] = self.auto_change_config.get()
-            self.config_dict['time'] = self.auto_change_time_config.get()
-            self.config_dict['page'] = self.auto_change_page_config.get()
+            self.config_dict['time'] = str(self.auto_change_time_config.get())
+            self.config_dict['page'] = str(self.auto_change_page_config.get())
         elif self.row_num == 2:
             self.config_dict['username'] = self.username.get()
             self.config_dict['password'] = self.password.get()
@@ -511,14 +580,14 @@ class PanConfigWindow(tk.Toplevel):
             self.config_dict['is_http'] = self.is_http_config.get()
             self.config_dict['host'] = self.host.get()
             self.config_dict['port'] = self.port.get()
-            self.config_dict['is_porxy'] = self.is_proxy_config.get()
+            self.config_dict['is_proxy'] = self.is_proxy_config.get()
 
     def ok(self):
         self.change_value()
         self.destroy()  # 销毁窗口
 
     def cancel(self):
-        self.config_dict = None  # 空！
+        self.config_dict = self.base_config_dict  # 空！
         self.destroy()
 
 
@@ -750,10 +819,17 @@ class _Main:  # 调用SysTrayIcon的Demo窗口
 
         # 托盘图标右键菜单, 格式: ('name', None, callback),下面也是二级菜单的例子
         # 24行有自动添加‘退出’，不需要的可删除
+        if s.app.is_proxy == "关闭":
+            close_text = "关闭√"
+            open_text = "开启"
+        else:
+            close_text = "关闭"
+            open_text = "开启√"
+
         menu_options = (
             ('切换壁纸', None, s.handle_change_bz),
             ('设置', None, s.handle_set_config),
-            ('代理', None, (('开启', None, s.handle_proxy), ('关闭', None, s.handle_proxy)))
+            ('代理', None, ((open_text, None, s.handle_proxy_open), (close_text, None, s.handle_proxy_close)))
         )
         # ('二级 菜单', None, (('更改 图标', None, s.switch_icon),)))
         # menu_options = ()
@@ -782,11 +858,11 @@ class _Main:  # 调用SysTrayIcon的Demo窗口
         # 气泡提示的例子
         s.show_msg(title='图标更换', msg='图标更换成功！', time=500)
 
-    def handle_proxy(s, _sysTrayIcon):
+    def handle_proxy_open(s, _sysTrayIcon):
         menu_options = (
             ('切换壁纸', None, s.handle_change_bz),
             ('设置', None, s.handle_set_config),
-            ('代理', None, (('开启√', None, s.handle_proxy), ('关闭', None, s.handle_proxy)))
+            ('代理', None, (('开启√', None, s.handle_proxy_open), ('关闭', None, s.handle_proxy_close)))
         )
 
         menu_options = menu_options + (('退出', None, _sysTrayIcon.QUIT),)
@@ -794,13 +870,41 @@ class _Main:  # 调用SysTrayIcon的Demo窗口
         _sysTrayIcon.menu_actions_by_id = set()
         _sysTrayIcon.menu_options = _sysTrayIcon._add_ids_to_menu_options(menu_options)
         _sysTrayIcon.menu_actions_by_id = dict(_sysTrayIcon.menu_actions_by_id)
+        s.app.is_proxy = "开启"
+        if os.path.isfile(s.app.config_path):
+            config_dict = configparser.ConfigParser()
+            config_dict.read(s.app.config_path, encoding="utf8")
+            config_dict.set('壁纸设置', '是否启用代理', s.app.is_proxy)
+            with open(s.app.config_path, "w+", encoding="utf8") as f:
+                config_dict.write(f)
+        s.app.set_proxy(s.app.auto_change_proxy, s.app.is_proxy)
 
+    def handle_proxy_close(s, _sysTrayIcon):
+        menu_options = (
+            ('切换壁纸', None, s.handle_change_bz),
+            ('设置', None, s.handle_set_config),
+            ('代理', None, (('开启', None, s.handle_proxy_open), ('关闭√', None, s.handle_proxy_close)))
+        )
+
+        menu_options = menu_options + (('退出', None, _sysTrayIcon.QUIT),)
+        _sysTrayIcon._next_action_id = _sysTrayIcon.FIRST_ID
+        _sysTrayIcon.menu_actions_by_id = set()
+        _sysTrayIcon.menu_options = _sysTrayIcon._add_ids_to_menu_options(menu_options)
+        _sysTrayIcon.menu_actions_by_id = dict(_sysTrayIcon.menu_actions_by_id)
+        s.app.is_proxy = "开启"
+        if os.path.isfile(s.app.config_path):
+            config_dict = configparser.ConfigParser()
+            config_dict.read(s.app.config_path, encoding="utf8")
+            config_dict.set('壁纸设置', '是否启用代理', s.app.is_proxy)
+            with open(s.app.config_path, "w+", encoding="utf8") as f:
+                config_dict.write(f)
+        s.app.set_proxy(s.app.auto_change_proxy, s.app.is_proxy)
 
     def handle_change_bz(s, _sysTrayIcon):
         s.app.button_next_bz()
 
     def handle_set_config(s, _sysTrayIcon):
-        config_dict = {
+        base_config_dict = {
             "bz": s.app.auto_change_bz,
             "time": s.app.auto_change_time,
             "page": s.app.auto_change_page,
@@ -811,14 +915,14 @@ class _Main:  # 调用SysTrayIcon的Demo窗口
             "port": s.app.auto_change_proxy.rsplit(":", 1)[-1].split(":")[0],
             "is_proxy": s.app.is_proxy
         }
-        copy_config_dict = copy.deepcopy(config_dict)
+        copy_config_dict = copy.deepcopy(base_config_dict)
         inputDialog = PanConfigWindow(s.app, copy_config_dict)
 
         s.root.wait_window(inputDialog)  # 这一句很重要！！！
-        if inputDialog.config_dict != None and inputDialog.config_dict != config_dict:
+        if inputDialog.config_dict != None and inputDialog.config_dict != base_config_dict:
             print("in")
             print(inputDialog.config_dict)
-            print(config_dict)
+            print(base_config_dict)
             s.app.auto_change_bz, s.app.auto_change_time, s.app.auto_change_page, s.app.username, s.app.password, is_http, host, port, s.app.is_proxy = inputDialog.config_dict.values()
             if is_http and host and port:
                 s.app.auto_change_proxy = f"{is_http}://{host}:{port}"
@@ -838,19 +942,17 @@ class _Main:  # 调用SysTrayIcon的Demo窗口
                     config_dict.write(f)
             # messagebox.showinfo('配置', '配置保存成功')
 
-            if inputDialog.config_dict['username'] != config_dict['username'] or inputDialog.config_dict['password'] != \
-                    config_dict['password']:
-                s.app.is_login(s.app.auto_change_proxy, s.app.username, s.app.password, s.app.is_proxy)
-            elif s.app.session:
-                proxies = {
-                    'https': s.app.auto_change_proxy,
-                    'http': s.app.auto_change_proxy
-                }
-                s.app.session.proxies.update(proxies)
-                if s.app.is_proxy == "是":
-                    s.app.session.trust_env = True
-                else:
-                    s.app.session.trust_env = False
+            if inputDialog.config_dict['is_proxy'] != base_config_dict['is_proxy'] or inputDialog.config_dict[
+                'is_http'] != \
+                    base_config_dict['is_http'] or inputDialog.config_dict['host'] != base_config_dict['host'] or \
+                    inputDialog.config_dict['port'] != base_config_dict['port']:
+                print('in_porxy')
+                s.app.set_proxy(s.app.auto_change_proxy, s.app.is_proxy)
+
+            if inputDialog.config_dict['username'] != base_config_dict['username'] or inputDialog.config_dict[
+                'password'] != \
+                    base_config_dict['password']:
+                s.app.is_login(s.app.username, s.app.password)
 
 
 if __name__ == '__main__':
