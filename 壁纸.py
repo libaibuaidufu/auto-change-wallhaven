@@ -117,7 +117,7 @@ class Application(tk.Frame):
 
         self.L3 = tk.Label(self, text="分辨率：")
         self.L3.pack(padx=5, pady=10, side=tk.LEFT)
-        respicker_list = ['', '1600×900', '1920×1080', "2560×1440", '3840×2160']
+        respicker_list = ['', '1600x900', '1920x1080', "2560x1440", '3840x2160']
         self.E3 = ttk.Combobox(self, width=10)
         self.E3["value"] = respicker_list
         self.E3.set(self.resolution)
@@ -208,9 +208,23 @@ class Application(tk.Frame):
 
     def button_search(self):
         self.search_key = self.E2.get()
-        if self.search_key:
-            self.auto_change_url = f"https://wallhaven.cc/search?q={self.search_key}&purity=100&sorting=random&order=desc"
-            self.contents.set(self.auto_change_url)
+        self.resolution = self.E3.get()
+        print(self.search_key)
+        print(self.resolution)
+        if self.search_key or self.resolution:
+            url = urlparse(self.auto_change_url)
+            if url.path:
+                url_type = url.path.split("/")[-1]
+                if url_type == "search":
+                    url_type = "random"
+            else:
+                url_type = "random"
+            if self.search_key:
+                self.auto_change_url = f"https://wallhaven.cc/search?q={self.search_key}&purity=100&sorting={url_type}&order=desc"
+            else:
+                self.auto_change_url = f"https://wallhaven.cc/search?purity=100&sorting={url_type}&order=desc"
+            print(self.auto_change_url)
+            self.E1.set(self.auto_change_url)
             if os.path.isfile(self.config_path):
                 config_dict = configparser.ConfigParser()
                 config_dict.read(self.config_path, encoding="utf8")
@@ -224,6 +238,8 @@ class Application(tk.Frame):
                                                               self.auto_change_url, self.auto_change_page),
                                                           daemon=True)
                 self.th_auto_change_bz.start()
+            else:
+                self.button_next_bz()
 
     def button_set_url_config(self):
         self.t_id += 1
