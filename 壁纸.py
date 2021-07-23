@@ -85,7 +85,7 @@ class Application(tk.Frame):
 
         self.create_session(self.auto_change_proxy, self.is_proxy)
 
-        if self.username and self.password:
+        if self.username and self.password :
             print('login')
             try:
                 self.is_login(self.username, self.password)
@@ -104,10 +104,11 @@ class Application(tk.Frame):
         # https://wallhaven.cc/toplist
         # https://wallhaven.cc/random
         # https://wallhaven.cc/untagged
+        # https://wallhaven.cc/favorites
         self.L1 = tk.Label(self, text="自定义壁纸地址：")
         self.L1.pack(padx=5, pady=10, side=tk.LEFT)
         url_list = ["https://wallhaven.cc/latest", 'https://wallhaven.cc/hot', 'https://wallhaven.cc/toplist',
-                    'https://wallhaven.cc/random', 'https://wallhaven.cc/untagged']
+                    'https://wallhaven.cc/random', 'https://wallhaven.cc/untagged', "https://wallhaven.cc/favorites"]
         self.E1 = ttk.Combobox(self, width=65)
         self.E1["value"] = url_list
         self.E1.set(self.auto_change_url)
@@ -242,6 +243,8 @@ class Application(tk.Frame):
                                                           self.auto_change_url, self.auto_change_page),
                                                       daemon=True)
             self.th_auto_change_bz.start()
+        else:
+            self.next_bz(self.auto_change_url, self.auto_change_page)
 
     def show_msg(self):
         if not self.PATH or not self.src_name:
@@ -356,14 +359,17 @@ class Application(tk.Frame):
                 break
 
     # 手动切换壁纸
-    def next_bz(self, auto_change_url, auto_change_page=15):
+    def next_bz(self, auto_change_url, auto_change_page=15, is_page=None):
         print('切换图片')
         base_url = 'https://w.wallhaven.cc/full/{src_type}/wallhaven-{src_name}'
         try:
-            if int(auto_change_page) <= 1:
-                page = 1
+            if not is_page:
+                if int(auto_change_page) <= 1:
+                    page = 1
+                else:
+                    page = random.randrange(1, int(auto_change_page))
             else:
-                page = random.randrange(1, int(auto_change_page))
+                page = is_page
             url_data = urlparse(auto_change_url)
             url_query_dict = parse_qs(url_data.query)
             url_query = f""
@@ -381,6 +387,9 @@ class Application(tk.Frame):
             soup: BeautifulSoup = BeautifulSoup(response.text, 'html.parser')
             div_tag = soup.find('section', class_='thumb-listing-page')
             li_list = div_tag.find_all('li')
+            if not li_list:
+                self.next_bz(auto_change_url, auto_change_page, is_page=1)
+                return
             bz_num = random.randrange(0, len(li_list) - 1)
             li_tag = li_list[bz_num]
             image_tag = li_tag.find('img', class_='lazyload')
