@@ -101,8 +101,7 @@ class Application(tk.Frame):
                 print('login_fail')
 
         if self.auto_change_bz == "是":
-            self.B5['text'] = "开启自动"
-            self.button_auto_change()
+            self.button_auto_change(is_open=True)
 
     def create_widgets(self):
         # https://wallhaven.cc/latest
@@ -211,8 +210,8 @@ class Application(tk.Frame):
 
         return auto_change_bz, auto_change_time, auto_change_url, auto_change_img, auto_change_page, auto_change_proxy, username, password, is_proxy
 
-    def button_auto_change(self):
-        if self.B5['text'] == "开启自动":
+    def button_auto_change(self,is_open=False):
+        if self.B5['text'] == "开启自动" or is_open:
             print('开启自动')
             self.B5['text'] = "关闭自动"
             self.t_id += 1
@@ -237,6 +236,8 @@ class Application(tk.Frame):
                                            args=(self.auto_change_url, self.auto_change_page),
                                            daemon=True)
         self.th_next_bz.start()
+        if self.B5['text'] == "关闭自动":
+            self.button_auto_change(is_open=True)
 
     def button_search(self):
         self.search_key = self.E2.get()
@@ -264,8 +265,7 @@ class Application(tk.Frame):
             self.E1.set(self.auto_change_url)
             self.button_next_bz()
             if self.auto_change_bz == "是":
-                self.B5['text'] = '开启自动'
-                self.button_auto_change()
+                self.button_auto_change(is_open=True)
 
     def button_set_url_config(self):
         self.auto_change_url = self.E1.get()
@@ -276,8 +276,7 @@ class Application(tk.Frame):
 
         self.button_next_bz()
         if self.auto_change_bz == "是":
-            self.B5['text'] = '开启自动'
-            self.button_auto_change()
+            self.button_auto_change(is_open=True)
 
     def show_msg(self):
         if not self.PATH or not self.src_name:
@@ -445,7 +444,7 @@ class Application(tk.Frame):
                     messagebox.showerror('错误', "请勿放无关网址")
                     return
             bz_num = random.randrange(0, len(li_url_list) - 1)
-            print(len(li_url_list),bz_num)
+            print(len(li_url_list), bz_num)
             src_num_url = li_url_list[bz_num]
             src_name = src_num_url.rsplit('-')[-1]
             print(src_num_url)
@@ -994,8 +993,7 @@ class _Main:  # 调用SysTrayIcon的Demo窗口
                 s.app.auto_change_proxy = ""
             if inputDialog.config_dict['time'] != base_config_dict['time'] or inputDialog.config_dict['page'] != \
                     base_config_dict['page']:
-                s.app.B5['text'] = "开启自动"
-                s.app.button_auto_change()
+                s.app.button_auto_change(is_open=True)
 
             if inputDialog.config_dict['is_proxy'] != base_config_dict['is_proxy'] or inputDialog.config_dict[
                 'is_http'] != \
