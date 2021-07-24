@@ -387,13 +387,17 @@ class Application(tk.Frame):
                 url_query += f'atleast={self.resolution}&'
 
             set_url_in_dict = base_url + url_query
-
+            if set_url_in_dict not in self.url_dict.keys():
+                self.url_dict[set_url_in_dict] = {"max_page": 0}
             if set_url_in_dict == self.url_dict['last_url']:
                 if self.page < int(auto_change_page):
                     self.page += 1
                 else:
                     self.page = 1
             else:
+                self.page = 1
+            max_page = self.url_dict[set_url_in_dict]['max_page']
+            if max_page and max_page < self.page:
                 self.page = 1
             url_query += f"page={self.page}"
             random_page_url = base_url + url_query
@@ -410,11 +414,10 @@ class Application(tk.Frame):
                     if self.page == 1:
                         messagebox.showinfo("提示", "没有相关内容")
                     else:
-                        self.page = 1
+                        self.url_dict[set_url_in_dict]["max_page"] = self.page - 1
+                        self.url_dict['last_url'] = ""
                         self.next_bz(auto_change_url, auto_change_page)
                     return
-                if set_url_in_dict not in self.url_dict.keys():
-                    self.url_dict[set_url_in_dict] = {}
                 self.url_dict[set_url_in_dict][self.page] = li_list
             bz_num = random.randrange(0, len(li_list) - 1)
             li_tag = li_list[bz_num]
