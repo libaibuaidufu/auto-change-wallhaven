@@ -210,7 +210,7 @@ class Application(tk.Frame):
 
         return auto_change_bz, auto_change_time, auto_change_url, auto_change_img, auto_change_page, auto_change_proxy, username, password, is_proxy
 
-    def button_auto_change(self,is_open=False):
+    def button_auto_change(self, is_open=False):
         if self.B5['text'] == "开启自动" or is_open:
             print('开启自动')
             self.B5['text'] = "关闭自动"
@@ -302,6 +302,24 @@ class Application(tk.Frame):
         self.set_proxy(auto_change_proxy, is_proxy)
         return self.session
 
+    def session_request(self, request_url, request_tpye, post_data={}):
+        try:
+            if request_tpye == "get":
+                if post_data:
+                    resp = self.session.get(request_url, data=post_data)
+                else:
+                    resp = self.session.get(request_url)
+            else:
+                if post_data:
+                    resp = self.session.post(request_url, data=post_data)
+                else:
+                    resp = self.session.post(request_url)
+        except requests.exceptions.SSLError and requests.exceptions.ConnectionError:
+            self.t_id += 1
+            messagebox.showerror('网络错误', "请检查网络连接或者代理问题")
+            resp = None
+        return resp
+
     # 登录
     def is_login(self, username, password, is_use_cookie=True):
         index_url = 'https://wallhaven.cc/'
@@ -316,19 +334,22 @@ class Application(tk.Frame):
             if os.path.exists('cookies.txt'):
                 with open('cookies.txt', 'rb') as f:
                     self.session.cookies.update(pickle.load(f))
-                check_response = self.session.get(index_url)
-                if username in check_response.text:
+                check_response = self.session_request(index_url, 'get')
+                if check_response and username in check_response.text:
                     self.master.title(gui_title + f"-{username}")
                     print('use cookies')
                     return
-        login_response = self.session.get(login_url)
+        login_response = self.session_request(login_url, 'get')
+        if not login_response:
+            return
         bf = BeautifulSoup(login_response.text, 'html.parser')
         hidden = bf.find_all('input', {'type': 'hidden'})
         for i in hidden:
             _token = i['value']
             payload['_token'] = _token
-
-        check_response = self.session.post(auth_login_url, data=payload)
+        check_response = self.session_request(auth_login_url, 'post', payload)
+        if not check_response:
+            return
         print(check_response.url)
         if check_response.url in (f"https://wallhaven.cc/user/{username}", 'https://wallhaven.cc'):
             with open('cookies.txt', 'wb') as f:
@@ -362,6 +383,7 @@ class Application(tk.Frame):
                 time.sleep(int(auto_change_time))
                 if t_id != self.t_id:
                     break
+                print(int(time.time()))
                 self.next_bz(auto_change_url, auto_change_page)
             except Exception as e:
                 print('1', e)
@@ -411,7 +433,9 @@ class Application(tk.Frame):
             if not li_url_list:
                 print('re_url')
                 self.url_dict['last_url'] = set_url_in_dict
-                response = self.session.get(random_page_url)
+                response = self.session_request(random_page_url, 'get')
+                if not response:
+                    return
                 soup: BeautifulSoup = BeautifulSoup(response.text, 'html.parser')
                 if "Forgot password" in soup.text:
                     messagebox.showerror('错误', "请登录后在访问需要登录的页面")
@@ -438,12 +462,13 @@ class Application(tk.Frame):
                             src_name = src_name.rsplit(".", 1)[0] + '.png'
                         src_num_url = base_download_url.format(src_type=src_type, src_name=src_name)
                         li_url_list.append(src_num_url)
-                        print(li_url_list)
+                        # print(li_url_list)
                     self.url_dict[set_url_in_dict][self.page] = li_url_list
                 else:
                     messagebox.showerror('错误', "请勿放无关网址")
                     return
             bz_num = random.randrange(0, len(li_url_list) - 1)
+            print(f"bz_num:{bz_num}")
             print(len(li_url_list), bz_num)
             src_num_url = li_url_list[bz_num]
             src_name = src_num_url.rsplit('-')[-1]
@@ -455,7 +480,9 @@ class Application(tk.Frame):
         print('更换壁纸中')
         try:
             img_type = src_num_url.rsplit('.')[-1]
-            resp = self.session.get(src_num_url)
+            resp = self.session_request(src_num_url, 'get')
+            if not resp:
+                return
             tfp = tempfile.NamedTemporaryFile(suffix='.' + img_type, delete=False)
             with tfp:
                 tfp.write(resp.content)
@@ -769,15 +796,15 @@ class SysTrayIcon(object):
     def destroy(s, hwnd=None, msg=None, wparam=None, lparam=None, exit=1):
         print('退出了')
         if os.path.isfile(s.app.config_path):
-            print(s.app.auto_change_url)
-            print(s.app.auto_change_bz)
-            print(s.app.auto_change_time)
-            print(s.app.auto_change_page)
-            print(s.app.auto_change_img)
-            print(s.app.auto_change_proxy)
-            print(s.app.username)
-            print(s.app.password)
-            print(s.app.is_proxy)
+            # print(s.app.auto_change_url)
+            # print(s.app.auto_change_bz)
+            # print(s.app.auto_change_time)
+            # print(s.app.auto_change_page)
+            # print(s.app.auto_change_img)
+            # print(s.app.auto_change_proxy)
+            # print(s.app.username)
+            # print(s.app.password)
+            # print(s.app.is_proxy)
             config_dict = configparser.ConfigParser()
             config_dict.read(s.app.config_path, encoding="utf8")
             config_dict.set("壁纸设置", '自动换壁纸', s.app.auto_change_bz)
