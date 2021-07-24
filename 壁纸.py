@@ -323,10 +323,20 @@ class Application(tk.Frame):
                 pickle.dump(self.session.cookies, f)
             self.master.title(gui_title + f"-{username}")
         else:
+            self.clear_username_password()
             messagebox.showinfo('登录错误', '用户名或者密码错误，请重新设置！')
         return
 
-        # 定时切换壁纸
+    def clear_username_password(self):
+        self.username = ""
+        self.password = ""
+        if os.path.isfile(self.config_path):
+            config_dict = configparser.ConfigParser()
+            config_dict.read(self.config_path, encoding="utf8")
+            config_dict.set('壁纸设置', '用户名', "")
+            config_dict.set('壁纸设置', '密码', "")
+            with open(self.config_path, "w+", encoding="utf8") as f:
+                config_dict.write(f)
 
     def set_proxy(self, auto_change_proxy, is_proxy):
         if is_proxy == "开启":
