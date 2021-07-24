@@ -17,6 +17,7 @@ import tempfile
 import threading
 import time
 import tkinter as tk
+import traceback
 from tkinter import messagebox, ttk
 from urllib.parse import unquote, urlparse, parse_qs
 
@@ -69,6 +70,8 @@ class Application(tk.Frame):
             'http': ""
         }
         self.resolution = "1920x1080"
+        self.url_dict = {"last_url": ""}
+        self.page = 1
         self.auto_change_bz, self.auto_change_time, self.auto_change_url, self.auto_change_img, self.auto_change_page, self.auto_change_proxy, self.username, self.password, self.is_proxy = self.get_config()
         if self.auto_change_img:
             img = Image.open(self.auto_change_img)
@@ -201,6 +204,7 @@ class Application(tk.Frame):
         return auto_change_bz, auto_change_time, auto_change_url, auto_change_img, auto_change_page, auto_change_proxy, username, password, is_proxy
 
     def button_next_bz(self):
+        print(self.auto_change_page)
         self.th_next_bz = threading.Thread(target=self.next_bz,
                                            args=(self.auto_change_url, self.auto_change_page),
                                            daemon=True)
@@ -280,19 +284,10 @@ class Application(tk.Frame):
             'User-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36',
             'referer': 'https://wallhaven.cc/login'
         }
-        proxies = {
-            'https': auto_change_proxy,
-            'http': auto_change_proxy
-        }
         self.session = requests.Session()
         self.session.headers = headers
-        if is_proxy == "开启":
-            print("开启代理了")
-            self.session.proxies.update(proxies)
-            self.session.trust_env = True
-        else:
-            self.session.proxies.update(self.no_proxies)
-            self.session.trust_env = False
+        self.session.trust_env = False
+        self.set_proxy(auto_change_proxy, is_proxy)
         return self.session
 
     # 登录
@@ -334,32 +329,23 @@ class Application(tk.Frame):
         # 定时切换壁纸
 
     def set_proxy(self, auto_change_proxy, is_proxy):
-        if is_proxy == "关闭":
-            print('关闭代理')
-            self.is_proxy = "关闭"
-            if os.path.isfile(self.config_path):
-                config_dict = configparser.ConfigParser()
-                config_dict.read(self.config_path, encoding="utf8")
-                config_dict.set('壁纸设置', '是否启用代理', self.is_proxy)
-                with open(self.config_path, "w+", encoding="utf8") as f:
-                    config_dict.write(f)
-            self.session.proxies.update(self.no_proxies)
-            self.session.trust_env = False
-        elif is_proxy == '开启':
+        if is_proxy == "开启":
             print('开启代理')
-            self.is_proxy = "开启"
-            if os.path.isfile(self.config_path):
-                config_dict = configparser.ConfigParser()
-                config_dict.read(self.config_path, encoding="utf8")
-                config_dict.set('壁纸设置', '是否启用代理', self.is_proxy)
-                with open(self.config_path, "w+", encoding="utf8") as f:
-                    config_dict.write(f)
             proxies = {
                 'https': auto_change_proxy,
                 'http': auto_change_proxy
             }
-            self.session.proxies.update()
-            self.session.trust_env = True
+        else:
+            print('关闭代理')
+            proxies = self.no_proxies
+        print(proxies)
+        self.session.proxies.update(proxies)
+        if os.path.isfile(self.config_path):
+            config_dict = configparser.ConfigParser()
+            config_dict.read(self.config_path, encoding="utf8")
+            config_dict.set('壁纸设置', '是否启用代理', self.is_proxy)
+            with open(self.config_path, "w+", encoding="utf8") as f:
+                config_dict.write(f)
 
     def change_bz(self, t_id, auto_change_time, auto_change_url, auto_change_page):
         while True:
@@ -374,18 +360,13 @@ class Application(tk.Frame):
                 break
 
     # 手动切换壁纸
-    def next_bz(self, auto_change_url, auto_change_page=15, is_page=None):
+    def next_bz(self, auto_change_url, auto_change_page=15):
         print('切换图片')
-        base_url = 'https://w.wallhaven.cc/full/{src_type}/wallhaven-{src_name}'
+        base_download_url = 'https://w.wallhaven.cc/full/{src_type}/wallhaven-{src_name}'
         try:
-            if not is_page:
-                if int(auto_change_page) <= 1:
-                    page = 1
-                else:
-                    page = random.randrange(1, int(auto_change_page))
-            else:
-                page = is_page
             url_data = urlparse(auto_change_url)
+            base_url = f"{url_data.scheme}://{url_data.netloc}{url_data.path}?"
+
             url_query_dict = parse_qs(url_data.query)
             url_query = f""
             for key, value in url_query_dict.items():
@@ -394,17 +375,37 @@ class Application(tk.Frame):
                 url_query += f"{key}={value[0]}&"
             if self.resolution:
                 url_query += f'atleast={self.resolution}&'
-            url_query += f"page={page}"
-            url_data = f"{url_data.scheme}://{url_data.netloc}{url_data.path}?"
-            random_page_url = url_data + url_query
-            print(random_page_url)
-            response = self.session.get(random_page_url)
-            soup: BeautifulSoup = BeautifulSoup(response.text, 'html.parser')
-            div_tag = soup.find('section', class_='thumb-listing-page')
-            li_list = div_tag.find_all('li')
+
+            set_url_in_dict = base_url + url_query
+
+            if set_url_in_dict == self.url_dict['last_url']:
+                if self.page < int(auto_change_page):
+                    self.page += 1
+                else:
+                    self.page = 1
+            else:
+                self.page = 1
+            url_query += f"page={self.page}"
+            random_page_url = base_url + url_query
+            li_list = None
+            if set_url_in_dict in self.url_dict.keys() and self.page in self.url_dict[set_url_in_dict]:
+                li_list = self.url_dict[set_url_in_dict][self.page]
             if not li_list:
-                self.next_bz(auto_change_url, auto_change_page, is_page=1)
-                return
+                self.url_dict['last_url'] = set_url_in_dict
+                response = self.session.get(random_page_url)
+                soup: BeautifulSoup = BeautifulSoup(response.text, 'html.parser')
+                div_tag = soup.find('section', class_='thumb-listing-page')
+                li_list = div_tag.find_all('li')
+                if not li_list:
+                    if self.page == 1:
+                        messagebox.showinfo("提示", "没有相关内容")
+                    else:
+                        self.page = 1
+                        self.next_bz(auto_change_url, auto_change_page)
+                    return
+                if set_url_in_dict not in self.url_dict.keys():
+                    self.url_dict[set_url_in_dict] = {}
+                self.url_dict[set_url_in_dict][self.page] = li_list
             bz_num = random.randrange(0, len(li_list) - 1)
             li_tag = li_list[bz_num]
             image_tag = li_tag.find('img', class_='lazyload')
@@ -415,10 +416,10 @@ class Application(tk.Frame):
             src_type = src_list[-2]
             if image_type_check:
                 src_name = src_name.rsplit(".", 1)[0] + '.png'
-            src_num_url = base_url.format(src_type=src_type, src_name=src_name)
+            src_num_url = base_download_url.format(src_type=src_type, src_name=src_name)
             print(src_num_url)
-        except Exception as e:
-            print(e)
+        except Exception:
+            traceback.print_exc()
             messagebox.showerror('错误', "请查看是否壁纸地址有问题！")
             return
         print('更换壁纸中')
@@ -438,13 +439,8 @@ class Application(tk.Frame):
             with open(self.config_path, "w+", encoding="utf8") as f:
                 config_dict.write(f)
             q.put(json.dumps({'path': PATH, 'src_name': src_name}))
-        except Exception as e:
-            print(e)
-            print(image_type_check)
-            print(image_tag)
-            print(src_url)
-            print(random_page_url)
-            print(src_num_url)
+        except Exception:
+            traceback.print_exc()
             messagebox.showerror('错误', "设置壁纸失败，那里出问题了我也不知道！可能是切换太频繁被限制了，等一会就好了。")
 
 
@@ -882,11 +878,18 @@ class _Main:  # 调用SysTrayIcon的Demo窗口
         # 气泡提示的例子
         s.show_msg(title='图标更换', msg='图标更换成功！', time=500)
 
-    def handle_proxy_open(s, _sysTrayIcon):
+    def change_menu(s, _sysTrayIcon):
+        if s.app.is_proxy == "关闭":
+            close_text = "关闭√"
+            open_text = "开启"
+        else:
+            close_text = "关闭"
+            open_text = "开启√"
+
         menu_options = (
             ('切换壁纸', None, s.handle_change_bz),
             ('设置', None, s.handle_set_config),
-            ('代理', None, (('开启√', None, s.handle_proxy_open), ('关闭', None, s.handle_proxy_close)))
+            ('代理', None, ((open_text, None, s.handle_proxy_open), (close_text, None, s.handle_proxy_close)))
         )
 
         menu_options = menu_options + (('退出', None, _sysTrayIcon.QUIT),)
@@ -894,7 +897,6 @@ class _Main:  # 调用SysTrayIcon的Demo窗口
         _sysTrayIcon.menu_actions_by_id = set()
         _sysTrayIcon.menu_options = _sysTrayIcon._add_ids_to_menu_options(menu_options)
         _sysTrayIcon.menu_actions_by_id = dict(_sysTrayIcon.menu_actions_by_id)
-        s.app.is_proxy = "开启"
         if os.path.isfile(s.app.config_path):
             config_dict = configparser.ConfigParser()
             config_dict.read(s.app.config_path, encoding="utf8")
@@ -902,27 +904,14 @@ class _Main:  # 调用SysTrayIcon的Demo窗口
             with open(s.app.config_path, "w+", encoding="utf8") as f:
                 config_dict.write(f)
         s.app.set_proxy(s.app.auto_change_proxy, s.app.is_proxy)
+
+    def handle_proxy_open(s, _sysTrayIcon):
+        s.app.is_proxy = "开启"
+        s.change_menu(_sysTrayIcon)
 
     def handle_proxy_close(s, _sysTrayIcon):
-        menu_options = (
-            ('切换壁纸', None, s.handle_change_bz),
-            ('设置', None, s.handle_set_config),
-            ('代理', None, (('开启', None, s.handle_proxy_open), ('关闭√', None, s.handle_proxy_close)))
-        )
-
-        menu_options = menu_options + (('退出', None, _sysTrayIcon.QUIT),)
-        _sysTrayIcon._next_action_id = _sysTrayIcon.FIRST_ID
-        _sysTrayIcon.menu_actions_by_id = set()
-        _sysTrayIcon.menu_options = _sysTrayIcon._add_ids_to_menu_options(menu_options)
-        _sysTrayIcon.menu_actions_by_id = dict(_sysTrayIcon.menu_actions_by_id)
-        s.app.is_proxy = "开启"
-        if os.path.isfile(s.app.config_path):
-            config_dict = configparser.ConfigParser()
-            config_dict.read(s.app.config_path, encoding="utf8")
-            config_dict.set('壁纸设置', '是否启用代理', s.app.is_proxy)
-            with open(s.app.config_path, "w+", encoding="utf8") as f:
-                config_dict.write(f)
-        s.app.set_proxy(s.app.auto_change_proxy, s.app.is_proxy)
+        s.app.is_proxy = "关闭"
+        s.change_menu(_sysTrayIcon)
 
     def handle_change_bz(s, _sysTrayIcon):
         s.app.button_next_bz()
@@ -971,6 +960,8 @@ class _Main:  # 调用SysTrayIcon的Demo窗口
                     base_config_dict['is_http'] or inputDialog.config_dict['host'] != base_config_dict['host'] or \
                     inputDialog.config_dict['port'] != base_config_dict['port']:
                 print('in_porxy')
+                s.app.is_proxy = inputDialog.config_dict['is_proxy']
+                s.change_menu(_sysTrayIcon)
                 s.app.set_proxy(s.app.auto_change_proxy, s.app.is_proxy)
 
             if inputDialog.config_dict['username'] != base_config_dict['username'] or inputDialog.config_dict[
