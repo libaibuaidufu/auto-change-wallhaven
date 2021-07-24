@@ -100,6 +100,9 @@ class Application(tk.Frame):
             except Exception:
                 print('login_fail')
 
+        if self.auto_change_bz == "是":
+            self.button_set_url_config()
+
     def create_widgets(self):
         # https://wallhaven.cc/latest
         # https://wallhaven.cc/hot
@@ -248,13 +251,16 @@ class Application(tk.Frame):
     def button_set_url_config(self):
         self.t_id += 1
         self.auto_change_url = self.E1.get()
+        url = urlparse(self.auto_change_url)
+        if "wallhaven.cc" != url.netloc:
+            messagebox.showerror('错误', "请勿放无关网址")
+            return
         if os.path.isfile(self.config_path):
             config_dict = configparser.ConfigParser()
             config_dict.read(self.config_path, encoding="utf8")
             config_dict.set('壁纸设置', '壁纸地址', unquote(self.auto_change_url))
             with open(self.config_path, "w+", encoding="utf8") as f:
                 config_dict.write(f)
-        messagebox.showinfo('配置', '配置保存成功')
         if self.auto_change_bz == "是":
             self.th_auto_change_bz = threading.Thread(target=self.change_bz,
                                                       args=(
@@ -362,8 +368,8 @@ class Application(tk.Frame):
             try:
                 if t_id != self.t_id:
                     break
-                self.next_bz(auto_change_url, auto_change_page)
                 time.sleep(int(auto_change_time))
+                self.next_bz(auto_change_url, auto_change_page)
             except Exception as e:
                 print('1', e)
                 messagebox.showerror('错误', '请重新启动！')
