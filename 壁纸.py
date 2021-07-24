@@ -408,17 +408,24 @@ class Application(tk.Frame):
                 self.url_dict['last_url'] = set_url_in_dict
                 response = self.session.get(random_page_url)
                 soup: BeautifulSoup = BeautifulSoup(response.text, 'html.parser')
-                div_tag = soup.find('section', class_='thumb-listing-page')
-                li_list = div_tag.find_all('li')
-                if not li_list:
-                    if self.page == 1:
-                        messagebox.showinfo("提示", "没有相关内容")
-                    else:
-                        self.url_dict[set_url_in_dict]["max_page"] = self.page - 1
-                        self.url_dict['last_url'] = ""
-                        self.next_bz(auto_change_url, auto_change_page)
+                if "Forgot password" in soup.text:
+                    messagebox.showerror('错误', "请登录后在访问需要登录的页面")
                     return
-                self.url_dict[set_url_in_dict][self.page] = li_list
+                div_tag = soup.find('section', class_='thumb-listing-page')
+                if div_tag:
+                    li_list = div_tag.find_all('li')
+                    if not li_list:
+                        if self.page == 1:
+                            messagebox.showinfo("提示", "没有相关内容")
+                        else:
+                            self.url_dict[set_url_in_dict]["max_page"] = self.page - 1
+                            self.url_dict['last_url'] = ""
+                            self.next_bz(auto_change_url, auto_change_page)
+                        return
+                    self.url_dict[set_url_in_dict][self.page] = li_list
+                else:
+                    messagebox.showerror('错误', "请勿放无关网址")
+                    return
             bz_num = random.randrange(0, len(li_list) - 1)
             li_tag = li_list[bz_num]
             image_tag = li_tag.find('img', class_='lazyload')
@@ -971,6 +978,9 @@ class _Main:  # 调用SysTrayIcon的Demo窗口
                 config_dict.set('壁纸设置', '是否启用代理', s.app.is_proxy)
                 with open(s.app.config_path, "w+", encoding="utf8") as f:
                     config_dict.write(f)
+            if inputDialog.config_dict['bz'] != base_config_dict['bz'] or inputDialog.config_dict['time'] != \
+                    base_config_dict['time'] or inputDialog.config_dict['page'] != base_config_dict['page']:
+                s.app.button_set_url_config()
 
             if inputDialog.config_dict['is_proxy'] != base_config_dict['is_proxy'] or inputDialog.config_dict[
                 'is_http'] != \
@@ -984,6 +994,7 @@ class _Main:  # 调用SysTrayIcon的Demo窗口
                     base_config_dict['password']:
                 s.app.is_login(s.app.username, s.app.password)
         _sysTrayIcon.show_config = False
+
 
 if __name__ == '__main__':
     q = queue.Queue()
