@@ -454,7 +454,7 @@ class Application(tk.Frame):
             q.put(json.dumps({'path': PATH, 'src_name': src_name}))
         except Exception:
             traceback.print_exc()
-            messagebox.showerror('错误', "设置壁纸失败，那里出问题了我也不知道！可能是切换太频繁被限制了，等一会就好了。")
+            messagebox.showerror('错误', "设置壁纸失败，那里出问题了我也不知道！可能是切换太频繁被限制了，等一会就好了。也可能是代理问题。")
 
 
 class PanConfigWindow(tk.Toplevel):
@@ -647,6 +647,7 @@ class SysTrayIcon(object):
         s.hover_text = hover_text
         s.on_quit = on_quit
         s.root = tk_window
+        s.show_config = False
 
         menu_options = menu_options + (('退出', None, s.QUIT),)
         s._next_action_id = s.FIRST_ID
@@ -768,7 +769,10 @@ class SysTrayIcon(object):
         if lparam == win32con.WM_RBUTTONUP:  # 右键弹起
             s.show_menu()
         elif lparam == win32con.WM_LBUTTONUP:  # 左键弹起
-            s.destroy(exit=0)
+            if not s.show_config:
+                s.destroy(exit=0)
+            else:
+                return False
         return True
         """
         可能的鼠标事件：
@@ -943,8 +947,8 @@ class _Main:  # 调用SysTrayIcon的Demo窗口
             "is_proxy": s.app.is_proxy
         }
         copy_config_dict = copy.deepcopy(base_config_dict)
+        _sysTrayIcon.show_config = True
         inputDialog = PanConfigWindow(s.app, copy_config_dict)
-
         s.root.wait_window(inputDialog)  # 这一句很重要！！！
         if inputDialog.config_dict != None and inputDialog.config_dict != base_config_dict:
             print("in")
@@ -967,22 +971,19 @@ class _Main:  # 调用SysTrayIcon的Demo窗口
                 config_dict.set('壁纸设置', '是否启用代理', s.app.is_proxy)
                 with open(s.app.config_path, "w+", encoding="utf8") as f:
                     config_dict.write(f)
-            # messagebox.showinfo('配置', '配置保存成功')
 
             if inputDialog.config_dict['is_proxy'] != base_config_dict['is_proxy'] or inputDialog.config_dict[
                 'is_http'] != \
                     base_config_dict['is_http'] or inputDialog.config_dict['host'] != base_config_dict['host'] or \
                     inputDialog.config_dict['port'] != base_config_dict['port']:
-                print('in_porxy')
                 s.app.is_proxy = inputDialog.config_dict['is_proxy']
                 s.change_menu(_sysTrayIcon)
-                s.app.set_proxy(s.app.auto_change_proxy, s.app.is_proxy)
 
             if inputDialog.config_dict['username'] != base_config_dict['username'] or inputDialog.config_dict[
                 'password'] != \
                     base_config_dict['password']:
                 s.app.is_login(s.app.username, s.app.password)
-
+        _sysTrayIcon.show_config = False
 
 if __name__ == '__main__':
     q = queue.Queue()
