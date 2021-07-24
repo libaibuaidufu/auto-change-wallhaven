@@ -15,16 +15,16 @@ python 壁纸.py
 
 ```bash
 # 单文件 单文件读取配置  (非必须-需要把配置文件config.ini 复制过去才能使用),如果添加 --add-data config.ini;. 就无法永久保存配置
-pyinstaller -F -w 壁纸.py -i 钱袋.ico --add-data 钱袋.ico;.
+pyinstaller -F -w 壁纸.py -i icon.ico --add-data icon.ico;.
 
 # 单文件 单文件读取配置 需要把配置文件config.ini 复制过去才能使用
-pyinstaller -F -w bz_not_gui.py -i 钱袋.ico --add-data 钱袋.ico;.
+pyinstaller -F -w bz_not_gui.py -i icon.ico --add-data icon.ico;.
 
 #######################
 #其他打包方式 文件方式 不需要复制config.ini
-pyinstaller -D -w 壁纸.py -i 钱袋.ico --add-data 钱袋.ico;. --add-data config.ini;.
+pyinstaller -D -w 壁纸.py -i icon.ico --add-data icon.ico;. --add-data config.ini;.
 # upx 压缩  同样需要复制config.ini 报错打不开 缺少dll
-pyinstaller -F -w 壁纸.py -i 钱袋.ico --add-data 钱袋.ico;.  --upx-dir=upx/upx.exe
+pyinstaller -F -w 壁纸.py -i icon.ico --add-data icon.ico;.  --upx-dir=upx/upx.exe
 ```
 
 ### 下载 release 包

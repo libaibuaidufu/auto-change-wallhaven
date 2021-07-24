@@ -31,7 +31,7 @@ from bs4 import BeautifulSoup
 
 config_path = 'config.ini'
 gui_title = '壁纸'
-gui_logo = '钱袋.ico'
+gui_logo = 'icon.ico'
 
 
 def resource_path(relative_path):
@@ -457,6 +457,7 @@ class Application(tk.Frame):
 class PanConfigWindow(tk.Toplevel):
     def __init__(self, app, config_dict):
         super().__init__()
+        self.iconbitmap(resource_path(gui_logo))  # 设置图标，仅支持.ico文件
         self.title("设置")
         sw = self.winfo_screenwidth()
         # 得到屏幕宽度
