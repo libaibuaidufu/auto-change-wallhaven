@@ -62,8 +62,8 @@ class Application(tk.Frame):
         self.master.title(gui_title)
         self.master.iconbitmap(resource_path(gui_logo))  # 设置图标，仅支持.ico文件
         self.pack(fill=tk.BOTH)
-        self.PATH, self.src_name = None, None
 
+        self.src_name = None
         self.t_id = 0  # 线程控制
         self.no_proxies = {
             'https': "",
@@ -279,12 +279,12 @@ class Application(tk.Frame):
             self.button_auto_change(is_open=True)
 
     def show_msg(self):
-        if not self.PATH or not self.src_name:
+        if not self.auto_change_img or not self.src_name:
             messagebox.showinfo('信息', '无法保存，谁让你上一次不保存呢！')
             return
         if not os.path.exists('save'):
             os.mkdir('save')
-        with open(self.PATH, 'rb') as f:
+        with open(self.auto_change_img, 'rb') as f:
             with open('save/' + self.src_name, 'wb') as fd:
                 fd.write(f.read())
         messagebox.showinfo('信息', '保存成功！')
