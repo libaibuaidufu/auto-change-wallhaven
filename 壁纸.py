@@ -65,9 +65,9 @@ class Application(tk.Frame):
 
         self.src_name = None
         self.t_id = 0  # 线程控制
-        self.no_proxies = {
-            'https': "",
-            'http': ""
+        self.proxies = {
+            "http": "",
+            "https": ""
         }
         self.resolution = "1920x1080"
         self.url_dict = {"last_url": ""}
@@ -273,7 +273,6 @@ class Application(tk.Frame):
         if "wallhaven.cc" != url.netloc:
             messagebox.showerror('错误', "请勿放无关网址")
             return
-
         self.button_next_bz()
         if self.auto_change_bz == "是":
             self.button_auto_change(is_open=True)
@@ -298,22 +297,24 @@ class Application(tk.Frame):
         }
         self.session = requests.Session()
         self.session.headers = headers
-        self.session.trust_env = False
-        self.set_proxy(auto_change_proxy, is_proxy)
+        self.proxies = {
+            "http": auto_change_proxy,
+            "https": auto_change_proxy,
+        }
         return self.session
 
     def session_request(self, request_url, request_tpye, post_data={}):
         try:
             if request_tpye == "get":
                 if post_data:
-                    resp = self.session.get(request_url, data=post_data)
+                    resp = self.session.get(request_url, proxies=self.proxies, data=post_data)
                 else:
-                    resp = self.session.get(request_url)
+                    resp = self.session.get(request_url, proxies=self.proxies)
             else:
                 if post_data:
-                    resp = self.session.post(request_url, data=post_data)
+                    resp = self.session.post(request_url, proxies=self.proxies, data=post_data)
                 else:
-                    resp = self.session.post(request_url)
+                    resp = self.session.post(request_url, proxies=self.proxies)
         except requests.exceptions.SSLError and requests.exceptions.ConnectionError:
             self.t_id += 1
             messagebox.showerror('网络错误', "请检查网络连接或者代理问题")
@@ -367,15 +368,16 @@ class Application(tk.Frame):
     def set_proxy(self, auto_change_proxy, is_proxy):
         if is_proxy == "开启":
             print('开启代理')
-            proxies = {
+            self.proxies = {
                 'https': auto_change_proxy,
                 'http': auto_change_proxy
             }
         else:
             print('关闭代理')
-            proxies = self.no_proxies
-        print(proxies)
-        self.session.proxies.update(proxies)
+            self.proxies = {
+                'https': "",
+                'http': ""
+            }
 
     def change_bz(self, t_id, auto_change_time, auto_change_url, auto_change_page):
         while True:
