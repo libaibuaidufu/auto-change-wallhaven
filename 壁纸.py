@@ -552,15 +552,15 @@ class PanConfigWindow(tk.Toplevel):
         l2 = tk.Label(row_c, text='壁纸切换间隔 ：', width=15)
         l2.grid(row=1, column=0, pady=pady, padx=padx)
         self.auto_change_time_config = tk.IntVar()
-        self.auto_change_time_config.set(self._app.auto_change_time)
+        self.auto_change_time_config.set(self.config_dict['time'])
         e2 = tk.Entry(row_c, textvariable=self.auto_change_time_config, width=20)
         e2.grid(row=1, column=1, pady=pady, padx=padx)
 
         l3 = tk.Label(row_c, text='壁纸页数 ：', width=15)
         l3.grid(row=2, column=0, pady=pady, padx=padx)
         self.auto_change_page_config = tk.IntVar()
-        self.auto_change_page_config.set(self._app.auto_change_page)
-        e3 = tk.Entry(row_c, textvariable=self.auto_change_page_config, width=8)
+        self.auto_change_page_config.set(self.config_dict['page'])
+        e3 = tk.Entry(row_c, textvariable=self.auto_change_page_config, width=20)
         e3.grid(row=2, column=1, pady=pady, padx=padx)
 
     def grid_user_config(self, row_c):
@@ -569,7 +569,7 @@ class PanConfigWindow(tk.Toplevel):
         l1 = tk.Label(row_c, text='用户名：', width=15)
         l1.grid(row=0, column=0, pady=pady, padx=padx)
         self.username = tk.StringVar()
-        self.username.set(self._app.username)
+        self.username.set(self.config_dict['username'])
         e1 = tk.Entry(row_c, textvariable=self.username, width=20)
         e1.grid(row=0, column=1, pady=pady, padx=padx)
 
@@ -577,7 +577,7 @@ class PanConfigWindow(tk.Toplevel):
         l2 = tk.Label(row_c, text='密码：', width=15)
         l2.grid(row=1, column=0, pady=pady, padx=padx)
         self.password = tk.StringVar()
-        self.password.set(self._app.password)
+        self.password.set(self.config_dict['password'])
         e2 = tk.Entry(row_c, textvariable=self.password, width=20)
         e2.grid(row=1, column=1, pady=pady, padx=padx)
 
@@ -585,7 +585,7 @@ class PanConfigWindow(tk.Toplevel):
         padx, pady = 5, 5
         l1 = tk.Label(row_c, text='协议 ：', width=15)
         l1.grid(row=0, column=0, pady=pady, padx=padx)
-        self.is_http_config = ttk.Combobox(row_c, width=20)  # 初始化
+        self.is_http_config = ttk.Combobox(row_c, width=17)  # 初始化
         is_http = ("", "https", "http")
         self.is_http_config["value"] = is_http
         self.is_http_config.current(is_http.index(self.config_dict['is_http']))
@@ -607,7 +607,7 @@ class PanConfigWindow(tk.Toplevel):
 
         l3 = tk.Label(row_c, text='启用代理 ：', width=15)
         l3.grid(row=3, column=0, pady=pady, padx=padx)
-        self.is_proxy_config = ttk.Combobox(row_c, width=20)  # 初始化
+        self.is_proxy_config = ttk.Combobox(row_c, width=17)  # 初始化
         is_proxy = ("开启", "关闭")
         self.is_proxy_config["value"] = is_proxy
         self.is_proxy_config.current(is_proxy.index(self.config_dict['is_proxy']))
@@ -617,23 +617,23 @@ class PanConfigWindow(tk.Toplevel):
         if self.last_m:
             self.change_value()
             self.last_m.destroy()
-        row_c = tk.Frame(self, width=200, height=35)
-        row_c.grid(row=0, column=1, pady=10)
-        self.grid_ui_config(row_c)
-        self.last_m = row_c
+        row_a = tk.Frame(self, width=200, height=35)
+        row_a.grid(row=0, column=1, pady=10)
+        self.grid_ui_config(row_a)
+        self.last_m = row_a
         self.row_num = 1
 
     def b2_cmd(self):
         if self.last_m:
             self.change_value()
             self.last_m.destroy()
-        row_c = tk.Frame(self, width=200, height=35)
-        row_c.grid(row=0, column=1)
-        self.grid_user_config(row_c)
-        self.last_m = row_c
+        row_b = tk.Frame(self, width=200, height=35)
+        row_b.grid(row=0, column=1)
+        self.grid_user_config(row_b)
+        self.last_m = row_b
         self.row_num = 2
 
-    def b3_cmd(self):
+    def b3_cmd(self, is_frist=False, grid_false=True):
         if self.last_m:
             self.change_value()
             self.last_m.destroy()
