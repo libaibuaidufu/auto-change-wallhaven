@@ -229,6 +229,7 @@ class Application(tk.Frame):
             self.auto_change_bz = "否"
             self.B5.text = "开启自动"
         print(self.t_id)
+
     def button_next_bz(self):
         th_next_bz = threading.Thread(target=self.next_bz,
                                       args=(self.auto_change_url, self.auto_change_page),
@@ -307,14 +308,14 @@ class Application(tk.Frame):
         try:
             if request_tpye == "get":
                 if post_data:
-                    resp = self.session.get(request_url, proxies=self.proxies, data=post_data)
+                    resp = self.session.get(request_url, proxies=self.proxies, data=post_data, timeout=60)
                 else:
-                    resp = self.session.get(request_url, proxies=self.proxies)
+                    resp = self.session.get(request_url, proxies=self.proxies, timeout=60)
             else:
                 if post_data:
-                    resp = self.session.post(request_url, proxies=self.proxies, data=post_data)
+                    resp = self.session.post(request_url, proxies=self.proxies, data=post_data, timeout=60)
                 else:
-                    resp = self.session.post(request_url, proxies=self.proxies)
+                    resp = self.session.post(request_url, proxies=self.proxies, timeout=60)
         except requests.exceptions.SSLError and requests.exceptions.ConnectionError:
             messagebox.showerror('网络错误', f"请检查网络连接或者代理问题 {json.dumps(self.proxies)}")
             resp = None
@@ -378,6 +379,7 @@ class Application(tk.Frame):
                 'http': ""
             }
         print(self.proxies)
+
     def change_bz(self, t_id, auto_change_time, auto_change_url, auto_change_page):
         while True:
             try:
