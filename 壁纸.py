@@ -211,10 +211,10 @@ class Application(tk.Frame):
         return auto_change_bz, auto_change_time, auto_change_url, auto_change_img, auto_change_page, auto_change_proxy, username, password, is_proxy
 
     def button_auto_change(self, is_open=False):
+        self.t_id += 1
         if self.B5['text'] == "开启自动" or is_open:
             print('开启自动')
             self.B5['text'] = "关闭自动"
-            self.t_id += 1
             self.auto_change_bz = "是"
 
             self.th_auto_change_bz = threading.Thread(target=self.change_bz,
@@ -226,9 +226,7 @@ class Application(tk.Frame):
         else:
             print('关闭自动')
             self.B5['text'] = "开启自动"
-            self.t_id += 1
             self.auto_change_bz = "否"
-
             self.B5.text = "开启自动"
 
     def button_next_bz(self):
@@ -385,7 +383,6 @@ class Application(tk.Frame):
                 time.sleep(int(auto_change_time))
                 if t_id != self.t_id:
                     break
-                print(int(time.time()))
                 self.next_bz(auto_change_url, auto_change_page)
             except Exception as e:
                 print('1', e)
@@ -633,7 +630,7 @@ class PanConfigWindow(tk.Toplevel):
         self.last_m = row_b
         self.row_num = 2
 
-    def b3_cmd(self, is_frist=False, grid_false=True):
+    def b3_cmd(self):
         if self.last_m:
             self.change_value()
             self.last_m.destroy()
@@ -796,50 +793,32 @@ class SysTrayIcon(object):
         s.refresh()
 
     def destroy(s, hwnd=None, msg=None, wparam=None, lparam=None, exit=1):
-        print('退出了')
-        if os.path.isfile(s.app.config_path):
-            # print(s.app.auto_change_url)
-            # print(s.app.auto_change_bz)
-            # print(s.app.auto_change_time)
-            # print(s.app.auto_change_page)
-            # print(s.app.auto_change_img)
-            # print(s.app.auto_change_proxy)
-            # print(s.app.username)
-            # print(s.app.password)
-            # print(s.app.is_proxy)
-            config_dict = configparser.ConfigParser()
-            config_dict.read(s.app.config_path, encoding="utf8")
-            config_dict.set("壁纸设置", '自动换壁纸', s.app.auto_change_bz)
-            config_dict.set("壁纸设置", '换壁纸时间', str(s.app.auto_change_time))
-            config_dict.set("壁纸设置", '壁纸地址', s.app.auto_change_url)
-            config_dict.set('壁纸设置', '壁纸页数', str(s.app.auto_change_page))
-            config_dict.set('壁纸设置', '缓存地址', s.app.auto_change_img)
-            config_dict.set('壁纸设置', '代理地址', s.app.auto_change_proxy)
-            config_dict.set('壁纸设置', '用户名', s.app.username)
-            config_dict.set('壁纸设置', '密码', s.app.password)
-            config_dict.set('壁纸设置', '是否启用代理', s.app.is_proxy)
-            with open(s.app.config_path, "w+", encoding="utf8") as f:
-                config_dict.write(f)
         nid = (s.hwnd, 0)
         win32gui.Shell_NotifyIcon(win32gui.NIM_DELETE, nid)
         win32gui.PostQuitMessage(0)  # 终止应用程序。
         if exit and s.on_quit:
+            print('退出了')
+            s.app.t_id += 1
+            if os.path.isfile(s.app.config_path):
+                config_dict = configparser.ConfigParser()
+                config_dict.read(s.app.config_path, encoding="utf8")
+                config_dict.set("壁纸设置", '自动换壁纸', s.app.auto_change_bz)
+                config_dict.set("壁纸设置", '换壁纸时间', str(s.app.auto_change_time))
+                config_dict.set("壁纸设置", '壁纸地址', s.app.auto_change_url)
+                config_dict.set('壁纸设置', '壁纸页数', str(s.app.auto_change_page))
+                config_dict.set('壁纸设置', '缓存地址', s.app.auto_change_img)
+                config_dict.set('壁纸设置', '代理地址', s.app.auto_change_proxy)
+                config_dict.set('壁纸设置', '用户名', s.app.username)
+                config_dict.set('壁纸设置', '密码', s.app.password)
+                config_dict.set('壁纸设置', '是否启用代理', s.app.is_proxy)
+                with open(s.app.config_path, "w+", encoding="utf8") as f:
+                    config_dict.write(f)
             s.on_quit()  # 需要传递自身过去时用 s.on_quit(s)
         else:
             s.root.deiconify()  # 显示tk窗口
 
     def notify(s, hwnd, msg, wparam, lparam):
         '''鼠标事件'''
-        # if lparam == win32con.WM_LBUTTONDBLCLK:  # 双击左键
-        #     pass
-        if lparam == win32con.WM_RBUTTONUP:  # 右键弹起
-            s.show_menu()
-        elif lparam == win32con.WM_LBUTTONUP:  # 左键弹起
-            if not s.show_config:
-                s.destroy(exit=0)
-            else:
-                return False
-        return True
         """
         可能的鼠标事件：
           WM_MOUSEMOVE      #光标经过图标
@@ -853,6 +832,16 @@ class SysTrayIcon(object):
           WM_MBUTTONUP      #滚轮弹起
           WM_MBUTTONDBLCLK  #双击滚轮
         """
+        # if lparam == win32con.WM_LBUTTONDBLCLK:  # 双击左键
+        #     pass
+        if lparam == win32con.WM_RBUTTONUP:  # 右键弹起
+            s.show_menu()
+        elif lparam == win32con.WM_LBUTTONUP:  # 左键弹起
+            if not s.show_config:
+                s.destroy(exit=0)
+            else:
+                return False
+        return True
 
     def create_menu(s, menu, menu_options):
         for option_text, option_icon, option_action, option_id in menu_options[::-1]:
