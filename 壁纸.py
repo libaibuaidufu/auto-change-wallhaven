@@ -800,6 +800,7 @@ class SysTrayIcon(object):
         win32gui.PostQuitMessage(0)  # 终止应用程序。
         if exit and s.on_quit:
             print('退出了')
+            s.app.t_id +=1
             if os.path.isfile(s.app.config_path):
                 config_dict = configparser.ConfigParser()
                 config_dict.read(s.app.config_path, encoding="utf8")
